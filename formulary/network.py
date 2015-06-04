@@ -176,8 +176,10 @@ class Network(object):
         """
         template.add_resource('{0}Route'.format(vpc_id),
                               _Route(route_table_id,
-                                     {'Fn::FindInMap': ['public', 'cidr']},
-                                     {'Ref': gateway_id}, internet_gateway_id))
+                                     {'Fn::FindInMap': ['SubnetConfig',
+                                                        'Public',
+                                                        'CIDR']},
+                                     gateway_id, internet_gateway_id))
 
     @staticmethod
     def _add_route_table(template, vpc_id):
@@ -252,6 +254,8 @@ class Network(object):
 
         """
         template = cloudformation.Template()
+        template.update_mappings(self._mappings)
+        template.set_description(self._network['description'])
         vpc_id, vpc_name = self._add_vpc(template)
         self._add_dhcp(template, vpc_id)
         self._add_network_acls(template, vpc_id, vpc_name)
@@ -372,7 +376,7 @@ class _NetworkACLEntry(cloudformation.Resource):
         self._properties['RuleNumber'] = rule_number
         self._properties['Protocol'] = protocol
         self._properties['RuleAction'] = action
-        self._properties['Egresss'] = egress
+        self._properties['Egress'] = egress
         ports = ports.split('-') if ports else (0, 65536)
         port_range = {'From': ports[0], 'To': ports[1]}
         self._properties['PortRange'] = port_range
