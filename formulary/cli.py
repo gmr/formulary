@@ -3,7 +3,9 @@ Formulary Command Line Interface
 
 """
 import argparse
+import logging
 from os import path
+import sys
 
 from formulary import __version__
 from formulary import cloudformation
@@ -25,14 +27,22 @@ def _add_commands(parser):
                         help='The type of stack to update')
 
 
-
 def _create_network_stack(region, environment, config_path):
     template = network.NetworkStackTemplate(environment, config_path)
-    cloudformation.create_stack(region, template)
+    try:
+        cloudformation.create_stack(region, template)
+    except cloudformation.RequestException as error:
+        sys.stdout.write(str(error) + "\n")
+        sys.exit(1)
+
 
 def _update_network_stack(region, environment, config_path):
     template = network.NetworkStackTemplate(environment, config_path)
-    cloudformation.update_stack(region, template)
+    try:
+        cloudformation.update_stack(region, template)
+    except cloudformation.RequestException as error:
+        sys.stdout.write(str(error) + "\n")
+        sys.exit(1)
 
 
 def run():
@@ -49,8 +59,13 @@ def run():
     parser.add_argument('-r', '--region', dest='region', default='us-east-1',
                         help='Specify the region for the stack. '
                              'Default: us-east-1')
+    parser.add_argument('-v', '--verbose', action='store_true')
 
     args = parser.parse_args()
+
+    if args.verbose:
+        logging.basicConfig(level=logging.INFO)
+
     if args.command == 'create':
         if args.type == 'network':
             _create_network_stack(args.region,

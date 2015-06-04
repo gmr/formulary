@@ -3,15 +3,10 @@ Cloud Formation Network Stack Management
 
 """
 import collections
-import logging
-from os import path
 
 from boto import vpc
-import yaml
 
 from formulary import cloudformation
-
-LOGGER = logging.getLogger(__name__)
 
 Subnet = collections.namedtuple('Subnet', ['id',
                                            'availability_zone',
@@ -27,7 +22,8 @@ class NetworkStack(cloudformation.Stack):
 
     """
     def __init__(self, name, region='us-east-1'):
-        """Create a new instance of a Stack for the given region and stack name
+        """Create a new instance of a Stack for the given region and
+        stack name.
 
         :param str name: The stack name
         :param str region: The AWS region, defaults to ``us-east-1``
@@ -84,21 +80,17 @@ class NetworkStackTemplate(cloudformation.Template):
     ACLs.
 
     """
-    PATH_PREFIX = 'vpcs'
+    CONFIG_PREFIX = 'vpcs'
 
-    def __init__(self, environment, config_path):
+    def __init__(self, name, config_path):
         """Create a new instance of a network stack.
 
-        :param str environment: The environment name for the stack
+        :param str name: The environment name for the stack
         :param str config_path: Path to the formulary configuration directory
 
         """
-        super(NetworkStackTemplate, self).__init__(environment)
-        self._config_path = config_path
-        self._environment = environment
-        self._environment_path = path.join(self.PATH_PREFIX, environment)
-        self._mappings = self._load_mappings()
-        self._network = self._load_config(self._environment_path, 'network')
+        super(NetworkStackTemplate, self).__init__(name, None, config_path)
+        self._network = self._load_config(self._local_path, 'network')
         self._description = self._network['description']
         self._vpc, self._vpc_name = self._add_vpc()
         self._add_dhcp()
@@ -117,8 +109,8 @@ class NetworkStackTemplate(cloudformation.Template):
         :rtype: str, str
 
         """
-        vpc_id = ''.join(x.capitalize() for x in self._environment.split('-'))
-        vpc_name = self._environment.replace('-', '_')
+        vpc_id = ''.join(x.capitalize() for x in self._name.split('-'))
+        vpc_name = self._name.replace('-', '_')
         resource = _VPC(vpc_name,
                         self._network['vpc']['dns-support'],
                         self._network['vpc']['dns-hostnames'],
@@ -232,32 +224,6 @@ class NetworkStackTemplate(cloudformation.Template):
             self.add_resource('{0}Assoc'.format(subnet_id),
                               _SubnetRouteTableAssociation(subnet_id,
                                                            self._route_table))
-
-    def _load_config(self, cfg_path, name):
-        """Load YAML configuration for the specified name from the path.
-
-        :param str cfg_path: The path prefix for the config file
-        :param str name: The name of the config file
-        :rtype: dict
-
-        """
-        config_file = path.normpath(path.join(self._config_path, cfg_path,
-                                              '{0}.yaml'.format(name)))
-        if path.exists(config_file):
-            with open(config_file) as handle:
-                return yaml.load(handle)
-
-    def _load_mappings(self):
-        """Load the mapping files for the template, pulling in first the top
-        level mappings, then the environment specific VPC mappings.
-
-        :rtype: dict
-
-        """
-        mappings = self._load_config('.', 'mapping')
-        mappings.update(self._load_config(self._environment_path, 'mapping')
-                        or {})
-        return mappings
 
 
 class _VPC(cloudformation.Resource):

@@ -1,13 +1,19 @@
 """
-Interface for creating Cloud Formation configuration and submitting it
+Cloud Formation methods and interfaces
 
 """
 import collections
 import json
+import logging
+from os import path
 
 import arrow
 from boto import cloudformation
+from boto import exception
 from dateutil import tz
+import yaml
+
+LOGGER = logging.getLogger(__name__)
 
 StackResource = collections.namedtuple('StackResource',
                                        ('id', 'type', 'name', 'status'))
@@ -18,13 +24,17 @@ def create_stack(region, template):
 
     :param str region: The region name to create the stack in
     :param Template template: The template to use
+    :raises: RequestException
 
     """
     connection = cloudformation.connect_to_region(region)
     template_body = template.as_json()
     if not connection.validate_template(template_body):
-        raise ValueError('The specified template did not validate')
-    connection.create_stack(template.name, template_body)
+        raise RequestException('The specified template did not validate')
+    try:
+        connection.create_stack(template.name, template_body)
+    except exception.BotoServerError as error:
+        raise RequestException(error)
     connection.close()
 
 
@@ -33,13 +43,17 @@ def update_stack(region, template):
 
     :param str region: The region name to create the stack in
     :param Template template: The template to use
+    :raises: RequestException
 
     """
     connection = cloudformation.connect_to_region(region)
     template_body = template.as_json()
     if not connection.validate_template(template_body):
-        raise ValueError('The specified template did not validate')
-    connection.update_stack(template.name, template_body)
+        raise RequestException('The specified template did not validate')
+    try:
+        connection.update_stack(template.name, template_body)
+    except exception.BotoServerError as error:
+        raise RequestException(error)
     connection.close()
 
 
@@ -131,13 +145,18 @@ class Stack(object):
 
 class Template(object):
     """Used to create a Cloud Formation configuration template"""
+    CONFIG_PREFIX = ''
+    PARENT_CONFIG_PREFIX = 'vpcs'
 
-    def __init__(self, name):
+    def __init__(self, name, parent, config_path):
         """Create a new Cloud Formation configuration template instance"""
-        self._name = name
+        self._config_path = config_path
         self._description = 'Formulary created Cloud Formation stack'
+        self._name = name
+        self._parent = parent
+
         self._conditions = {}
-        self._mappings = {}
+        self._mappings = self._load_mappings()
         self._metadata = {}
         self._outputs = {}
         self._parameters = {}
@@ -195,6 +214,54 @@ class Template(object):
 
         """
         self._mappings.update(mappings)
+
+    @staticmethod
+    def _load_config(cfg_path, name):
+        """Load YAML configuration for the specified name from the path.
+
+        :param str cfg_path: The path prefix for the config file
+        :param str name: The name of the config file
+        :rtype: dict
+
+        """
+        config_file = path.normpath(path.join(cfg_path,
+                                              '{0}.yaml'.format(name)))
+        LOGGER.debug('Loading configuration from %s', config_file)
+        if path.exists(config_file):
+            with open(config_file) as handle:
+                return yaml.load(handle)
+
+    def _load_mappings(self):
+        """Load the mapping files for the template, pulling in first the top
+        level mappings, then the environment specific VPC mappings.
+
+        :rtype: dict
+
+        """
+        mappings = self._load_config(self._config_path, 'mapping') or {}
+        mappings.update(self._load_config(self._parent_path, 'mapping') or {})
+        mappings.update(self._load_config(self._local_path, 'mapping') or {})
+        return mappings
+
+    @property
+    def _local_path(self):
+        """Return a path to the config file local to the Template type being
+        created.
+
+        :rtype: str
+
+        """
+        return path.join(self._config_path, self.CONFIG_PREFIX, self.name)
+
+    @property
+    def _parent_path(self):
+        """Return the path to the parent template, if set
+
+        :rtype: str|None
+
+        """
+        return path.join(self._config_path, self.PARENT_CONFIG_PREFIX,
+                         self._parent) if self._parent else ''
 
 
 class Resource(object):
@@ -272,3 +339,16 @@ class Resource(object):
 
         """
         self._name = name
+
+
+class RequestException(Exception):
+    def __init__(self, error):
+        error = str(error)
+        payload = json.loads(error[error.find('{'):])
+        self._message = payload['Error']['Message']
+
+    def __repr__(self):
+        return '<{0} "{1}">'.format(self._message)
+
+    def __str__(self):
+        return self._message
