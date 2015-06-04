@@ -43,6 +43,14 @@ class Network(object):
         return self._template.as_json()
 
     def _add_vpc(self, template):
+        """Add the VPC section to the template, returning the id and name
+        for use in the other sections of the stack configuration
+
+        :param template: The template to add the VPC to
+        :type template: formulary.cloudformation.Template
+        :rtype: str, str
+
+        """
         vpc_id = ''.join(x.capitalize() for x in self._environment.split('-'))
         vpc_name = self._environment.replace('-', '_')
 
@@ -52,10 +60,25 @@ class Network(object):
         return vpc_id, vpc_name
 
     def _add_dhcp(self, template, vpc_id):
+        """Add all of the DHCP options to the template for the given VPC
+
+        :param template: The template to add the VPC to
+        :type template: formulary.cloudformation.Template
+        :param str vpc_id: The VPC to add the DHCP configuration to
+
+        """
         dhcp_id = self._add_dhcp_options(template, vpc_id)
         self._add_dhcp_association(template, vpc_id, dhcp_id)
 
     def _add_dhcp_options(self, template, vpc_id):
+        """Add all of the DHCP options to the template for the given VPC
+
+        :param template: The template to add the VPC to
+        :type template: formulary.cloudformation.Template
+        :param str vpc_id: The VPC to add the DHCP options to
+        :rtype: str
+
+        """
         config = self._network['dhcp-options']
         dhcp_id = '{0}Dhcp'.format(vpc_id)
         template.add_resource(dhcp_id, _DHCPOptions(config['domain-name'],
@@ -65,17 +88,43 @@ class Network(object):
 
     @staticmethod
     def _add_dhcp_association(template, vpc_id, dhcp_id):
+        """Add all of the DHCP OptionsAssociation to the template for the given
+        VPC and DHCP Options ID.
+
+        :param template: The template to add the VPC to
+        :type template: formulary.cloudformation.Template
+        :param str vpc_id: The VPC to associate the DHCP options with
+        :param str dhcp_id: The DHCP options identifier
+
+        """
         template.add_resource('{0}Assoc'.format(dhcp_id),
                               _DHCPOptionsAssociation(dhcp_id, vpc_id))
 
     @staticmethod
     def _add_gateway(template, vpc_id):
+        """Add a gateway to the template for the specified VPC
+
+        :param template: The template to add the VPC to
+        :type template: formulary.cloudformation.Template
+        :param str vpc_id: The VPC to add the gateway to
+        :rtype: str
+
+        """
         gateway_id = '{0}Gateway'.format(vpc_id)
         template.add_resource(gateway_id, _Gateway())
         return gateway_id
 
     @staticmethod
     def _add_gateway_attachment(template, vpc_id, gateway_id):
+        """Attach the specified gateway to the VPC
+
+        :param template: The template to add the VPC to
+        :type template: formulary.cloudformation.Template
+        :param str vpc_id: The VPC to associate the gateway with
+        :param str gateway_id: The gateway
+        :rtype: str
+
+        """
         internet_gateway_id = '{0}Attachment'.format(gateway_id)
         template.add_resource(internet_gateway_id,
                               _GatewayAttachment(vpc_id, gateway_id))
@@ -83,23 +132,48 @@ class Network(object):
 
     @staticmethod
     def _add_network_acl(template, index, acl_id, acl):
+        """Add an entry for the specified ACL
+
+        :param template: The template to add the VPC to
+        :type template: formulary.cloudformation.Template
+        :param int index: The entry offset in the list
+        :param str acl_id: The ALC to add the entry to
+        :param dict acl: The ACL configuration
+
+        """
         entry_id = '{0}{1}'.format(acl_id, index)
         template.add_resource(entry_id, _NetworkACLEntry(
             acl_id, acl['cidr'], acl['number'], acl['protocol'], acl['action'],
             acl['egress'], acl['ports']))
 
     def _add_network_acls(self, template, vpc_id, vpc_name):
-        # Network ACL
+        """Add Network ACLs for the specified VPC
+
+        :param template: The template to add the VPC to
+        :type template: formulary.cloudformation.Template
+        :param str vpc_id: The VPC ID to associate the gateway with
+        :param str vpc_name: The VPC name to associate the gateway with
+
+        """
         acl_id = '{0}Acl'.format(vpc_id)
         template.add_resource(acl_id, _NetworkACL(vpc_name, vpc_id))
-
-        # Network ACL Entries
         for index, acl in enumerate(self._network['network-acls']):
             self._add_network_acl(template, index, acl_id, acl)
 
     @staticmethod
     def _add_public_route(template, vpc_id, route_table_id, gateway_id,
                           internet_gateway_id):
+        """Add the public route specified in the mapping ``pubic/cidr`` for
+        the specified VPC, route table, gateway and internet gateway.
+
+        :param template: The template to add the VPC to
+        :type template: formulary.cloudformation.Template
+        :param str vpc_id: The VPC ID to associate the route with
+        :param str route_table_id: The route table
+        :param str gateway_id: The gateway
+        :param str internet_gateway_id: The internet gateway
+
+        """
         template.add_resource('{0}Route'.format(vpc_id),
                               _Route(route_table_id,
                                      {'Fn::FindInMap': ['public', 'cidr']},
@@ -107,11 +181,27 @@ class Network(object):
 
     @staticmethod
     def _add_route_table(template, vpc_id):
+        """Add the the route table for the specified VPC
+
+        :param template: The template to add the VPC to
+        :type template: formulary.cloudformation.Template
+        :param str vpc_id: The VPC ID to associate the route table with
+        :rtype: str
+
+        """
         route_table_id = '{0}RouteTable'.format(vpc_id)
         template.add_resource(route_table_id, _RouteTable(vpc_id))
         return route_table_id
 
     def _add_routing(self, template, vpc_id):
+        """Add all of the routing configuration for the specified VPC
+
+        :param template: The template to add the VPC to
+        :type template: formulary.cloudformation.Template
+        :param str vpc_id: The VPC ID to associate the route table with
+        :rtype: str
+
+        """
         gateway_id = self._add_gateway(template, vpc_id)
         internet_gateway_id = self._add_gateway_attachment(template, vpc_id,
                                                            gateway_id)
@@ -121,6 +211,16 @@ class Network(object):
         return route_table_id
 
     def _add_subnet(self, template, subnet, vpc_id, vpc_name, route_table_id):
+        """Add the subnet for the specified VPC and route table
+
+        :param template: The template to add the VPC to
+        :type template: formulary.cloudformation.Template
+        :param str subnet: The subnet name
+        :param str vpc_id: The VPC ID to associate the subnet with
+        :param str vpc_name: The VPC name
+        :param str route_table_id: The route table
+
+        """
         subnet_cfg = self._network['subnets'][subnet]
         subnet_id = '{0}{1}Subnet'.format(vpc_id, subnet)
         template.add_resource(subnet_id,
@@ -132,6 +232,16 @@ class Network(object):
                                                            route_table_id))
 
     def _add_subnets(self, template, vpc_id, vpc_name, route_table_id):
+        """Add the network subnets for the specified VPC and route table
+
+        :param template: The template to add the VPC to
+        :type template: formulary.cloudformation.Template
+        :param str subnet: The subnet name
+        :param str vpc_id: The VPC ID to associate the subnets with
+        :param str vpc_name: The VPC name
+        :param str route_table_id: The route table
+
+        """
         for subnet in self._network['subnets']:
             self._add_subnet(template, subnet, vpc_id, vpc_name, route_table_id)
 
@@ -150,6 +260,13 @@ class Network(object):
         return template
 
     def _load_config(self, cfg_path, name):
+        """Load YAML configuration for the specified name from the path.
+
+        :param str cfg_path: The path prefix for the config file
+        :param str name: The name of the config file
+        :rtype: dict
+
+        """
         config_file = path.normpath(path.join(self._config_path, cfg_path,
                                               '{0}.yaml'.format(name)))
         if path.exists(config_file):
@@ -157,6 +274,12 @@ class Network(object):
                 return yaml.load(handle)
 
     def _load_mappings(self):
+        """Load the mapping files for the template, pulling in first the top
+        level mappings, then the environment specific VPC mappings.
+
+        :rtype: dict
+
+        """
         mappings = self._load_config('.', 'mapping')
         mappings.update(self._load_config(self._environment_path, 'mapping')
                         or {})
