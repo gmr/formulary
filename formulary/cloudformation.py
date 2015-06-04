@@ -29,7 +29,7 @@ def create_stack(region, template):
 
 
 def update_stack(region, template):
-    """Create a stack in the specified region with the given template.
+    """Update a stack in the specified region with the given template.
 
     :param str region: The region name to create the stack in
     :param Template template: The template to use
@@ -40,13 +40,6 @@ def update_stack(region, template):
     if not connection.validate_template(template_body):
         raise ValueError('The specified template did not validate')
     connection.update_stack(template.name, template_body)
-    connection.close()
-
-
-def describe_stack(region, stack_name):
-    connection = cloudformation.connect_to_region(region)
-    print(connection.describe_stacks(stack_name))
-    print(connection.describe_stack_resources(stack_name))
     connection.close()
 
 
