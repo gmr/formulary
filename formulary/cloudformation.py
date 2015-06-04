@@ -30,12 +30,15 @@ class Template(object):
         resources = dict({})
         for key, value in self._resources.items():
             resources[key] = value.as_dict()
-        return json.dumps({'AWSTemplateFormatVersion': '2010-09-09',
-                           'Mappings': self._mappings,
-                           'Outputs': self._outputs,
-                           'Parameters': self._parameters,
-                           'Resources': resources},
-                          indent=indent, sort_keys=True)
+        return json.dumps({
+            'AWSTemplateFormatVersion': '2010-09-09',
+            'Mappings': self._mappings,
+            'Outputs': self._outputs,
+            'Parameters': self._parameters,
+            'Resources': resources
+        },
+                          indent=indent,
+                          sort_keys=True)
 
     def update_mappings(self, mappings):
         """
@@ -48,6 +51,7 @@ class Resource(object):
     Used for creating a cloud formation resource
 
     """
+
     def __init__(self, resource_type):
         self._attributes = {}
         self._name = None
@@ -90,16 +94,17 @@ class Resource(object):
         :return: dict
 
         """
-        dict_val = dict({'Type': self._type,
-                         'Properties': self._properties})
+        dict_val = dict({'Type': self._type, 'Properties': self._properties})
         if self._tags:
             dict_val['Properties']['Tags'] = []
             for key, value in self._tags.items():
-                dict_val['Properties']['Tags'].append({'Key': key,
-                                                       'Value': value})
+                dict_val['Properties']['Tags'].append(
+                    {'Key': key,
+                     'Value': value})
             if self._name:
-                dict_val['Properties']['Tags'].append({'Key': 'Name',
-                                                       'Value': self._name})
+                dict_val['Properties']['Tags'].append(
+                    {'Key': 'Name',
+                     'Value': self._name})
         for key, value in self._attributes.items():
             dict_val[key] = value
         return dict_val

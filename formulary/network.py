@@ -7,7 +7,7 @@ from os import path
 
 import yaml
 
-from formulary import cf
+from formulary import cloudformation
 
 LOGGER = logging.getLogger(__name__)
 
@@ -21,6 +21,12 @@ class Network(object):
     PATH_PREFIX = 'vpcs'
 
     def __init__(self, environment, config_path):
+        """Create a new instance of a network stack.
+
+        :param str environment: The environment name for the stack
+        :param str config_path: Path to the formulary configuration directory
+
+        """
         self._config_path = config_path
         self._environment = environment
         self._environment_path = path.join(self.PATH_PREFIX, environment)
@@ -40,11 +46,9 @@ class Network(object):
         vpc_id = ''.join(x.capitalize() for x in self._environment.split('-'))
         vpc_name = self._environment.replace('-', '_')
 
-        template.add_resource(vpc_id,
-                              _VPC(vpc_name,
-                                   self._network['vpc']['dns-support'],
-                                   self._network['vpc']['dns-hostnames'],
-                                   self._network['cidr']))
+        template.add_resource(vpc_id, _VPC(
+            vpc_name, self._network['vpc']['dns-support'],
+            self._network['vpc']['dns-hostnames'], self._network['cidr']))
         return vpc_id, vpc_name
 
     def _add_dhcp(self, template, vpc_id):
@@ -54,10 +58,9 @@ class Network(object):
     def _add_dhcp_options(self, template, vpc_id):
         config = self._network['dhcp-options']
         dhcp_id = '{0}Dhcp'.format(vpc_id)
-        template.add_resource(dhcp_id,
-                              _DHCPOptions(config['domain-name'],
-                                           config['name-servers'],
-                                           config['ntp-servers']))
+        template.add_resource(dhcp_id, _DHCPOptions(config['domain-name'],
+                                                    config['name-servers'],
+                                                    config['ntp-servers']))
         return dhcp_id
 
     @staticmethod
@@ -81,14 +84,9 @@ class Network(object):
     @staticmethod
     def _add_network_acl(template, index, acl_id, acl):
         entry_id = '{0}{1}'.format(acl_id, index)
-        template.add_resource(entry_id,
-                              _NetworkACLEntry(acl_id,
-                                               acl['cidr'],
-                                               acl['number'],
-                                               acl['protocol'],
-                                               acl['action'],
-                                               acl['egress'],
-                                               acl['ports']))
+        template.add_resource(entry_id, _NetworkACLEntry(
+            acl_id, acl['cidr'], acl['number'], acl['protocol'], acl['action'],
+            acl['egress'], acl['ports']))
 
     def _add_network_acls(self, template, vpc_id, vpc_name):
         # Network ACL
@@ -105,8 +103,7 @@ class Network(object):
         template.add_resource('{0}Route'.format(vpc_id),
                               _Route(route_table_id,
                                      {'Fn::FindInMap': ['public', 'cidr']},
-                                     {'Ref': gateway_id},
-                                     internet_gateway_id))
+                                     {'Ref': gateway_id}, internet_gateway_id))
 
     @staticmethod
     def _add_route_table(template, vpc_id):
@@ -128,8 +125,7 @@ class Network(object):
         subnet_id = '{0}{1}Subnet'.format(vpc_id, subnet)
         template.add_resource(subnet_id,
                               _Subnet(vpc_name, subnet, vpc_id,
-                                      subnet_cfg['az'],
-                                      subnet_cfg['cidr']))
+                                      subnet_cfg['az'], subnet_cfg['cidr']))
         subnet_route_association = '{0}Assoc'.format(subnet_id)
         template.add_resource(subnet_route_association,
                               _SubnetRouteTableAssociation(subnet_id,
@@ -142,10 +138,10 @@ class Network(object):
     def _build(self):
         """Build the Cloud Formation template for the network stack
 
-        :rtype: formulary.cf.Template
+        :rtype: formulary.cloudformation.Template
 
         """
-        template = cf.Template()
+        template = cloudformation.Template()
         vpc_id, vpc_name = self._add_vpc(template)
         self._add_dhcp(template, vpc_id)
         self._add_network_acls(template, vpc_id, vpc_name)
@@ -154,8 +150,7 @@ class Network(object):
         return template
 
     def _load_config(self, cfg_path, name):
-        config_file = path.normpath(path.join(self._config_path,
-                                              cfg_path,
+        config_file = path.normpath(path.join(self._config_path, cfg_path,
                                               '{0}.yaml'.format(name)))
         if path.exists(config_file):
             with open(config_file) as handle:
@@ -163,13 +158,12 @@ class Network(object):
 
     def _load_mappings(self):
         mappings = self._load_config('.', 'mapping')
-        mappings.update(self._load_config(self._environment_path,
-                                          'mapping') or {})
+        mappings.update(self._load_config(self._environment_path, 'mapping')
+                        or {})
         return mappings
 
 
-class _VPC(cf.Resource):
-
+class _VPC(cloudformation.Resource):
     def __init__(self, name, dns_support, dns_hostnames, cidr_block):
         super(_VPC, self).__init__('AWS::EC2::VPC')
         self._name = name
@@ -178,8 +172,7 @@ class _VPC(cf.Resource):
         self._properties['CidrBlock'] = cidr_block
 
 
-class _DHCPOptions(cf.Resource):
-
+class _DHCPOptions(cloudformation.Resource):
     def __init__(self, domain_name, name_servers, ntp_servers):
         super(_DHCPOptions, self).__init__('AWS::EC2::DHCPOptions')
         self._properties['DomainName'] = domain_name
@@ -187,8 +180,7 @@ class _DHCPOptions(cf.Resource):
         self._properties['NtpServers'] = ntp_servers
 
 
-class _DHCPOptionsAssociation(cf.Resource):
-
+class _DHCPOptionsAssociation(cloudformation.Resource):
     def __init__(self, dhcp_id, vpc_id):
         super(_DHCPOptionsAssociation,
               self).__init__('AWS::EC2::VPCDHCPOptionsAssociation')
@@ -196,14 +188,12 @@ class _DHCPOptionsAssociation(cf.Resource):
         self._properties['VpcId'] = {'Ref': vpc_id}
 
 
-class _Gateway(cf.Resource):
-
+class _Gateway(cloudformation.Resource):
     def __init__(self):
         super(_Gateway, self).__init__('AWS::EC2::InternetGateway')
 
 
-class _GatewayAttachment(cf.Resource):
-
+class _GatewayAttachment(cloudformation.Resource):
     def __init__(self, vpc_id, gateway_id):
         super(_GatewayAttachment,
               self).__init__('AWS::EC2::VPCGatewayAttachment')
@@ -211,15 +201,13 @@ class _GatewayAttachment(cf.Resource):
         self._properties['VpcId'] = {'Ref': vpc_id}
 
 
-class _RouteTable(cf.Resource):
-
+class _RouteTable(cloudformation.Resource):
     def __init__(self, vpc_id):
         super(_RouteTable, self).__init__('AWS::EC2::RouteTable')
         self._properties['VpcId'] = {'Ref': vpc_id}
 
 
-class _Route(cf.Resource):
-
+class _Route(cloudformation.Resource):
     def __init__(self, route_table_id, cidr_block, gateway_id, depends_on):
         super(_Route, self).__init__('AWS::EC2::Route')
         self._properties['RouteTableId'] = {'Ref': route_table_id}
@@ -228,8 +216,7 @@ class _Route(cf.Resource):
         self._attributes['DependsOn'] = depends_on
 
 
-class _Subnet(cf.Resource):
-
+class _Subnet(cloudformation.Resource):
     def __init__(self, vpc_name, subnet, vpc_id, az, cidr_block):
         super(_Subnet, self).__init__('AWS::EC2::Subnet')
         self._name = '{0}{1}_subnet'.format(vpc_name, subnet)
@@ -238,23 +225,22 @@ class _Subnet(cf.Resource):
         self._properties['VpcId'] = {'Ref': vpc_id}
 
 
-class _SubnetRouteTableAssociation(cf.Resource):
-
+class _SubnetRouteTableAssociation(cloudformation.Resource):
     def __init__(self, subnet_id, route_table_id):
         super(_SubnetRouteTableAssociation,
               self).__init__('AWS::EC2::SubnetRouteTableAssociation')
         self._properties['SubnetId'] = {'Ref': subnet_id}
         self._properties['RouteTableId'] = {'Ref': route_table_id}
 
-class _NetworkACL(cf.Resource):
 
+class _NetworkACL(cloudformation.Resource):
     def __init__(self, vpc_name, vpc_id):
         super(_NetworkACL, self).__init__('AWS::EC2::NetworkAcl')
         self._name = '{0}_acl'.format(vpc_name)
         self._properties['VpcId'] = {'Ref': vpc_id}
 
 
-class _NetworkACLEntry(cf.Resource):
+class _NetworkACLEntry(cloudformation.Resource):
     def __init__(self, acl_id, cidr_block, rule_number, protocol, action,
                  egress, ports):
         super(_NetworkACLEntry, self).__init__('AWS::EC2::NetworkAclEntry')
