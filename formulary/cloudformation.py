@@ -1,25 +1,28 @@
 """
-Interface for creating Cloud-Formation configuration and submitting it
+Interface for creating Cloud Formation configuration and submitting it
 
 """
 import json
 
 
 class Template(object):
-    """Used to create a Cloud-Formation configuration template.
-
-    """
+    """Used to create a Cloud Formation configuration template"""
 
     def __init__(self):
+        """Create a new Cloud Formation configuration template instance"""
         self._mappings = {}
         self._outputs = {}
         self._parameters = {}
         self._resources = {}
 
-    def add_resource(self, name, resource):
+    def add_resource(self, resource_id, resource):
+        """Add a resource to the template
+
+        :param str resource_id: The camelCase resource_id
+        :param Resource resource: The resource to add
+
         """
-        """
-        self._resources[name] = resource
+        self._resources[resource_id] = resource
 
     def as_json(self, indent=2):
         """Return the cloud-formation template as JSON
@@ -30,29 +33,35 @@ class Template(object):
         resources = dict({})
         for key, value in self._resources.items():
             resources[key] = value.as_dict()
-        return json.dumps({
-            'AWSTemplateFormatVersion': '2010-09-09',
-            'Mappings': self._mappings,
-            'Outputs': self._outputs,
-            'Parameters': self._parameters,
-            'Resources': resources
-        },
-                          indent=indent,
-                          sort_keys=True)
+        return json.dumps({'AWSTemplateFormatVersion': '2010-09-09',
+                           'Mappings': self._mappings,
+                           'Outputs': self._outputs,
+                           'Parameters': self._parameters,
+                           'Resources': resources
+                          }, indent=indent, sort_keys=True)
 
     def update_mappings(self, mappings):
-        """
+        """Update the template's mappings with values from another mapping
+        dictionary.
+
+        :param dict mappings: Additional mappings to add
+
         """
         self._mappings.update(mappings)
 
 
 class Resource(object):
-    """
-    Used for creating a cloud formation resource
+    """Cloud Formation Resource
+
+    Represents a Cloud Formation resource as a class
 
     """
-
     def __init__(self, resource_type):
+        """Create a new resource specifying the resource type
+
+        :param str resource_type: Resource type such as ``AWS::EC2::Route``
+
+        """
         self._attributes = {}
         self._name = None
         self._properties = {}
