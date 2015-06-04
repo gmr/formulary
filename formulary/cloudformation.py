@@ -226,7 +226,7 @@ class Template(object):
         """
         config_file = path.normpath(path.join(cfg_path,
                                               '{0}.yaml'.format(name)))
-        LOGGER.debug('Loading configuration from %s', config_file)
+        LOGGER.info('Loading configuration from %s', config_file)
         if path.exists(config_file):
             with open(config_file) as handle:
                 return yaml.load(handle)
