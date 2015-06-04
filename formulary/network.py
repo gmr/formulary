@@ -2,14 +2,80 @@
 Cloud Formation Network Stack Management
 
 """
+import collections
 import logging
 from os import path
 
+from boto import vpc
 import yaml
 
 from formulary import cloudformation
 
 LOGGER = logging.getLogger(__name__)
+
+Subnet = collections.namedtuple('Subnet', ['id',
+                                           'availability_zone',
+                                           'cidr_block',
+                                           'environment',
+                                           'status',
+                                           'available_ips'])
+
+
+class NetworkStack(cloudformation.Stack):
+    """Represents the an existing Formulary network Cloud Formation stack
+    with attributes that return the AWS ids.
+
+    """
+    def __init__(self, name, region='us-east-1'):
+        """Create a new instance of a Stack for the given region and stack name
+
+        :param str name: The stack name
+        :param str region: The AWS region, defaults to ``us-east-1``
+
+        """
+        super(NetworkStack, self).__init__(name, region)
+        self._vpc_connection = vpc.VPCConnection()
+        self._subnets = self._get_subnets(self._get_subnet_ids())
+
+    @property
+    def subnets(self):
+        """Returns a list of subnets created by this stack
+
+        :rtype: list
+
+        """
+        return self._subnets
+
+    def _get_subnet_ids(self):
+        """Return the AWS physical ID list used to get the subnet details
+
+        :rtype: list
+
+        """
+        values = []
+        for resource in self._resources:
+            if resource.type == 'AWS::EC2::Subnet':
+                values.append(resource.id)
+        return values
+
+    def _get_subnets(self, subnet_ids):
+        """Fetches subnet data from AWS for the given subnets, returning
+        a list of namedtuples with additional subnet data.
+
+        :param list subnet_ids: The list of subnet IDs from AWS
+        :rtype: list
+
+        """
+        values = []
+        subnets = self._vpc_connection.get_all_subnets(subnet_ids)
+        for subnet in subnets:
+            values.append(Subnet(subnet.id,
+                                 subnet.availability_zone,
+                                 subnet.cidr_block,
+                                 subnet.tags.get('Environment'),
+                                 subnet.state,
+                                 subnet.available_ip_address_count))
+        return values
 
 
 class NetworkStackTemplate(cloudformation.Template):
@@ -27,7 +93,7 @@ class NetworkStackTemplate(cloudformation.Template):
         :param str config_path: Path to the formulary configuration directory
 
         """
-        super(NetworkStackTemplate, self).__init__()
+        super(NetworkStackTemplate, self).__init__(environment)
         self._config_path = config_path
         self._environment = environment
         self._environment_path = path.join(self.PATH_PREFIX, environment)
@@ -42,7 +108,7 @@ class NetworkStackTemplate(cloudformation.Template):
         self._add_public_route()
         self._acl = self._add_network_acl()
         self._add_network_acl_entries()
-
+        self._add_subnets()
 
     def _add_vpc(self):
         """Add the VPC section to the template, returning the id and name
@@ -53,10 +119,12 @@ class NetworkStackTemplate(cloudformation.Template):
         """
         vpc_id = ''.join(x.capitalize() for x in self._environment.split('-'))
         vpc_name = self._environment.replace('-', '_')
-
-        self.add_resource(vpc_id, _VPC(
-            vpc_name, self._network['vpc']['dns-support'],
-            self._network['vpc']['dns-hostnames'], self._network['cidr']))
+        resource = _VPC(vpc_name,
+                        self._network['vpc']['dns-support'],
+                        self._network['vpc']['dns-hostnames'],
+                        self._network['cidr'])
+        resource.add_tag('Environment', self._network['environment'])
+        self.add_resource(vpc_id, resource)
         return vpc_id, vpc_name
 
     def _add_dhcp(self):
@@ -114,7 +182,9 @@ class NetworkStackTemplate(cloudformation.Template):
 
         """
         acl = '{0}Acl'.format(self._vpc)
-        self.add_resource(acl, _NetworkACL(self._vpc_name, self._vpc))
+        resource = _NetworkACL(self._vpc_name, self._vpc)
+        resource.add_tag('Environment', self._network['environment'])
+        self.add_resource(acl, resource)
         return acl
 
     def _add_network_acl_entries(self):
@@ -150,12 +220,15 @@ class NetworkStackTemplate(cloudformation.Template):
 
     def _add_subnets(self):
         """Add the network subnets for the specified VPC and route table"""
+        subnet_ids = []
         for subnet in self._network['subnets']:
             config = self._network['subnets'][subnet]
             subnet_id = '{0}{1}Subnet'.format(self._vpc, subnet)
-            self.add_resource(subnet_id,
-                              _Subnet(self._vpc_name, subnet, self._vpc,
-                                      config['az'], config['cidr']))
+            subnet_ids.append(subnet_id)
+            resource = _Subnet(self._vpc_name, subnet, self._vpc,
+                               config['az'], config['cidr'])
+            resource.add_tag('Environment', self._network['environment'])
+            self.add_resource(subnet_id, resource)
             self.add_resource('{0}Assoc'.format(subnet_id),
                               _SubnetRouteTableAssociation(subnet_id,
                                                            self._route_table))
@@ -225,6 +298,28 @@ class _GatewayAttachment(cloudformation.Resource):
         self._properties['VpcId'] = {'Ref': vpc_id}
 
 
+class _NetworkACL(cloudformation.Resource):
+    def __init__(self, vpc_name, vpc_id):
+        super(_NetworkACL, self).__init__('AWS::EC2::NetworkAcl')
+        self._name = '{0}_acl'.format(vpc_name)
+        self._properties['VpcId'] = {'Ref': vpc_id}
+
+
+class _NetworkACLEntry(cloudformation.Resource):
+    def __init__(self, acl_id, cidr_block, rule_number, protocol, action,
+                 egress, ports):
+        super(_NetworkACLEntry, self).__init__('AWS::EC2::NetworkAclEntry')
+        self._properties['NetworkAclId'] = {'Ref': acl_id}
+        self._properties['CidrBlock'] = cidr_block
+        self._properties['RuleNumber'] = rule_number
+        self._properties['Protocol'] = protocol
+        self._properties['RuleAction'] = action
+        self._properties['Egress'] = egress
+        ports = ports.split('-') if ports else (0, 65536)
+        port_range = {'From': ports[0], 'To': ports[1]}
+        self._properties['PortRange'] = port_range
+
+
 class _RouteTable(cloudformation.Resource):
     def __init__(self, vpc_id):
         super(_RouteTable, self).__init__('AWS::EC2::RouteTable')
@@ -255,25 +350,3 @@ class _SubnetRouteTableAssociation(cloudformation.Resource):
               self).__init__('AWS::EC2::SubnetRouteTableAssociation')
         self._properties['SubnetId'] = {'Ref': subnet_id}
         self._properties['RouteTableId'] = {'Ref': route_table_id}
-
-
-class _NetworkACL(cloudformation.Resource):
-    def __init__(self, vpc_name, vpc_id):
-        super(_NetworkACL, self).__init__('AWS::EC2::NetworkAcl')
-        self._name = '{0}_acl'.format(vpc_name)
-        self._properties['VpcId'] = {'Ref': vpc_id}
-
-
-class _NetworkACLEntry(cloudformation.Resource):
-    def __init__(self, acl_id, cidr_block, rule_number, protocol, action,
-                 egress, ports):
-        super(_NetworkACLEntry, self).__init__('AWS::EC2::NetworkAclEntry')
-        self._properties['NetworkAclId'] = {'Ref': acl_id}
-        self._properties['CidrBlock'] = cidr_block
-        self._properties['RuleNumber'] = rule_number
-        self._properties['Protocol'] = protocol
-        self._properties['RuleAction'] = action
-        self._properties['Egress'] = egress
-        ports = ports.split('-') if ports else (0, 65536)
-        port_range = {'From': ports[0], 'To': ports[1]}
-        self._properties['PortRange'] = port_range
