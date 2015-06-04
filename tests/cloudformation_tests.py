@@ -103,3 +103,17 @@ class TemplateTests(unittest.TestCase):
         result = json.loads(template.as_json())
         self.assertDictEqual(result['Resources']['VPCTestName'],
                              VPC_EXPECTATION)
+
+    def test_default_description(self):
+        template = cloudformation.Template()
+        expectation = 'Formulary created Cloud Formation stack'
+        result = json.loads(template.as_json())
+        self.assertEqual(result['Description'], expectation)
+
+    def test_set_description(self):
+        template = cloudformation.Template()
+        expectation = 'This is a test description'
+        template.set_description(expectation)
+        result = json.loads(template.as_json())
+        self.assertEqual(result['Description'], expectation)
+

@@ -10,6 +10,7 @@ class Template(object):
 
     def __init__(self):
         """Create a new Cloud Formation configuration template instance"""
+        self._description = 'Formulary created Cloud Formation stack'
         self._mappings = {}
         self._outputs = {}
         self._parameters = {}
@@ -34,11 +35,19 @@ class Template(object):
         for key, value in self._resources.items():
             resources[key] = value.as_dict()
         return json.dumps({'AWSTemplateFormatVersion': '2010-09-09',
+                           'Description': self._description,
                            'Mappings': self._mappings,
                            'Outputs': self._outputs,
                            'Parameters': self._parameters,
                            'Resources': resources
                           }, indent=indent, sort_keys=True)
+
+    def set_description(self, description):
+        """Set the template description
+
+        :param str description: The description value
+        """
+        self._description = description
 
     def update_mappings(self, mappings):
         """Update the template's mappings with values from another mapping
