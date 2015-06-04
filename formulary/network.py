@@ -1,0 +1,269 @@
+"""
+Cloud Formation Network Stack Management
+
+"""
+import logging
+from os import path
+
+import yaml
+
+from formulary import cf
+
+LOGGER = logging.getLogger(__name__)
+
+
+class Network(object):
+    """Create a Network cloud-formation stack consisting of the VPC,
+    DHCP options, gateway configuration, routing tables, subnets, and network
+    ACLs.
+
+    """
+    PATH_PREFIX = 'vpcs'
+
+    def __init__(self, environment, config_path):
+        self._config_path = config_path
+        self._environment = environment
+        self._environment_path = path.join(self.PATH_PREFIX, environment)
+        self._mappings = self._load_mappings()
+        self._network = self._load_config(self._environment_path, 'network')
+        self._template = self._build()
+
+    def as_json(self):
+        """Return the Network cloud formation JSON
+
+        :rtype: str
+
+        """
+        return self._template.as_json()
+
+    def _add_vpc(self, template):
+        vpc_id = ''.join(x.capitalize() for x in self._environment.split('-'))
+        vpc_name = self._environment.replace('-', '_')
+
+        template.add_resource(vpc_id,
+                              _VPC(vpc_name,
+                                   self._network['vpc']['dns-support'],
+                                   self._network['vpc']['dns-hostnames'],
+                                   self._network['cidr']))
+        return vpc_id, vpc_name
+
+    def _add_dhcp(self, template, vpc_id):
+        dhcp_id = self._add_dhcp_options(template, vpc_id)
+        self._add_dhcp_association(template, vpc_id, dhcp_id)
+
+    def _add_dhcp_options(self, template, vpc_id):
+        config = self._network['dhcp-options']
+        dhcp_id = '{0}Dhcp'.format(vpc_id)
+        template.add_resource(dhcp_id,
+                              _DHCPOptions(config['domain-name'],
+                                           config['name-servers'],
+                                           config['ntp-servers']))
+        return dhcp_id
+
+    @staticmethod
+    def _add_dhcp_association(template, vpc_id, dhcp_id):
+        template.add_resource('{0}Assoc'.format(dhcp_id),
+                              _DHCPOptionsAssociation(dhcp_id, vpc_id))
+
+    @staticmethod
+    def _add_gateway(template, vpc_id):
+        gateway_id = '{0}Gateway'.format(vpc_id)
+        template.add_resource(gateway_id, _Gateway())
+        return gateway_id
+
+    @staticmethod
+    def _add_gateway_attachment(template, vpc_id, gateway_id):
+        internet_gateway_id = '{0}Attachment'.format(gateway_id)
+        template.add_resource(internet_gateway_id,
+                              _GatewayAttachment(vpc_id, gateway_id))
+        return internet_gateway_id
+
+    @staticmethod
+    def _add_network_acl(template, index, acl_id, acl):
+        entry_id = '{0}{1}'.format(acl_id, index)
+        template.add_resource(entry_id,
+                              _NetworkACLEntry(acl_id,
+                                               acl['cidr'],
+                                               acl['number'],
+                                               acl['protocol'],
+                                               acl['action'],
+                                               acl['egress'],
+                                               acl['ports']))
+
+    def _add_network_acls(self, template, vpc_id, vpc_name):
+        # Network ACL
+        acl_id = '{0}Acl'.format(vpc_id)
+        template.add_resource(acl_id, _NetworkACL(vpc_name, vpc_id))
+
+        # Network ACL Entries
+        for index, acl in enumerate(self._network['network-acls']):
+            self._add_network_acl(template, index, acl_id, acl)
+
+    @staticmethod
+    def _add_public_route(template, vpc_id, route_table_id, gateway_id,
+                          internet_gateway_id):
+        template.add_resource('{0}Route'.format(vpc_id),
+                              _Route(route_table_id,
+                                     {'Fn::FindInMap': ['public', 'cidr']},
+                                     {'Ref': gateway_id},
+                                     internet_gateway_id))
+
+    @staticmethod
+    def _add_route_table(template, vpc_id):
+        route_table_id = '{0}RouteTable'.format(vpc_id)
+        template.add_resource(route_table_id, _RouteTable(vpc_id))
+        return route_table_id
+
+    def _add_routing(self, template, vpc_id):
+        gateway_id = self._add_gateway(template, vpc_id)
+        internet_gateway_id = self._add_gateway_attachment(template, vpc_id,
+                                                           gateway_id)
+        route_table_id = self._add_route_table(template, vpc_id)
+        self._add_public_route(template, vpc_id, route_table_id, gateway_id,
+                               internet_gateway_id)
+        return route_table_id
+
+    def _add_subnet(self, template, subnet, vpc_id, vpc_name, route_table_id):
+        subnet_cfg = self._network['subnets'][subnet]
+        subnet_id = '{0}{1}Subnet'.format(vpc_id, subnet)
+        template.add_resource(subnet_id,
+                              _Subnet(vpc_name, subnet, vpc_id,
+                                      subnet_cfg['az'],
+                                      subnet_cfg['cidr']))
+        subnet_route_association = '{0}Assoc'.format(subnet_id)
+        template.add_resource(subnet_route_association,
+                              _SubnetRouteTableAssociation(subnet_id,
+                                                           route_table_id))
+
+    def _add_subnets(self, template, vpc_id, vpc_name, route_table_id):
+        for subnet in self._network['subnets']:
+            self._add_subnet(template, subnet, vpc_id, vpc_name, route_table_id)
+
+    def _build(self):
+        """Build the Cloud Formation template for the network stack
+
+        :rtype: formulary.cf.Template
+
+        """
+        template = cf.Template()
+        vpc_id, vpc_name = self._add_vpc(template)
+        self._add_dhcp(template, vpc_id)
+        self._add_network_acls(template, vpc_id, vpc_name)
+        route_table_id = self._add_routing(template, vpc_id)
+        self._add_subnets(template, vpc_id, vpc_name, route_table_id)
+        return template
+
+    def _load_config(self, cfg_path, name):
+        config_file = path.normpath(path.join(self._config_path,
+                                              cfg_path,
+                                              '{0}.yaml'.format(name)))
+        if path.exists(config_file):
+            with open(config_file) as handle:
+                return yaml.load(handle)
+
+    def _load_mappings(self):
+        mappings = self._load_config('.', 'mapping')
+        mappings.update(self._load_config(self._environment_path,
+                                          'mapping') or {})
+        return mappings
+
+
+class _VPC(cf.Resource):
+
+    def __init__(self, name, dns_support, dns_hostnames, cidr_block):
+        super(_VPC, self).__init__('AWS::EC2::VPC')
+        self._name = name
+        self._properties['EnableDnsSupport'] = dns_support
+        self._properties['EnableDnsHostnames'] = dns_hostnames
+        self._properties['CidrBlock'] = cidr_block
+
+
+class _DHCPOptions(cf.Resource):
+
+    def __init__(self, domain_name, name_servers, ntp_servers):
+        super(_DHCPOptions, self).__init__('AWS::EC2::DHCPOptions')
+        self._properties['DomainName'] = domain_name
+        self._properties['DomainNameServers'] = name_servers
+        self._properties['NtpServers'] = ntp_servers
+
+
+class _DHCPOptionsAssociation(cf.Resource):
+
+    def __init__(self, dhcp_id, vpc_id):
+        super(_DHCPOptionsAssociation,
+              self).__init__('AWS::EC2::VPCDHCPOptionsAssociation')
+        self._properties['DhcpOptionsId'] = {'Ref': dhcp_id}
+        self._properties['VpcId'] = {'Ref': vpc_id}
+
+
+class _Gateway(cf.Resource):
+
+    def __init__(self):
+        super(_Gateway, self).__init__('AWS::EC2::InternetGateway')
+
+
+class _GatewayAttachment(cf.Resource):
+
+    def __init__(self, vpc_id, gateway_id):
+        super(_GatewayAttachment,
+              self).__init__('AWS::EC2::VPCGatewayAttachment')
+        self._properties['InternetGatewayId'] = {'Ref': gateway_id}
+        self._properties['VpcId'] = {'Ref': vpc_id}
+
+
+class _RouteTable(cf.Resource):
+
+    def __init__(self, vpc_id):
+        super(_RouteTable, self).__init__('AWS::EC2::RouteTable')
+        self._properties['VpcId'] = {'Ref': vpc_id}
+
+
+class _Route(cf.Resource):
+
+    def __init__(self, route_table_id, cidr_block, gateway_id, depends_on):
+        super(_Route, self).__init__('AWS::EC2::Route')
+        self._properties['RouteTableId'] = {'Ref': route_table_id}
+        self._properties['DestinationCidrBlock'] = cidr_block
+        self._properties['GatewayId'] = {'Ref': gateway_id}
+        self._attributes['DependsOn'] = depends_on
+
+
+class _Subnet(cf.Resource):
+
+    def __init__(self, vpc_name, subnet, vpc_id, az, cidr_block):
+        super(_Subnet, self).__init__('AWS::EC2::Subnet')
+        self._name = '{0}{1}_subnet'.format(vpc_name, subnet)
+        self._properties['AvailabilityZone'] = az
+        self._properties['CidrBlock'] = cidr_block
+        self._properties['VpcId'] = {'Ref': vpc_id}
+
+
+class _SubnetRouteTableAssociation(cf.Resource):
+
+    def __init__(self, subnet_id, route_table_id):
+        super(_SubnetRouteTableAssociation,
+              self).__init__('AWS::EC2::SubnetRouteTableAssociation')
+        self._properties['SubnetId'] = {'Ref': subnet_id}
+        self._properties['RouteTableId'] = {'Ref': route_table_id}
+
+class _NetworkACL(cf.Resource):
+
+    def __init__(self, vpc_name, vpc_id):
+        super(_NetworkACL, self).__init__('AWS::EC2::NetworkAcl')
+        self._name = '{0}_acl'.format(vpc_name)
+        self._properties['VpcId'] = {'Ref': vpc_id}
+
+
+class _NetworkACLEntry(cf.Resource):
+    def __init__(self, acl_id, cidr_block, rule_number, protocol, action,
+                 egress, ports):
+        super(_NetworkACLEntry, self).__init__('AWS::EC2::NetworkAclEntry')
+        self._properties['NetworkAclId'] = {'Ref': acl_id}
+        self._properties['CidrBlock'] = cidr_block
+        self._properties['RuleNumber'] = rule_number
+        self._properties['Protocol'] = protocol
+        self._properties['RuleAction'] = action
+        self._properties['Egresss'] = egress
+        ports = ports.split('-') if ports else (0, 65536)
+        port_range = {'From': ports[0], 'To': ports[1]}
+        self._properties['PortRange'] = port_range
