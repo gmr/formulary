@@ -38,9 +38,7 @@ def _create_network_stack(region, environment, config_path):
 def _create_service_stack(region, environment, name, config_path):
     template = service.ServiceStackTemplate(name, environment, region,
                                             config_path)
-    print(template.as_json())
     _create_stack(region, template)
-
 
 def _update_network_stack(region, environment, config_path):
     _update_stack(region,
@@ -50,7 +48,6 @@ def _update_network_stack(region, environment, config_path):
 def _update_service_stack(region, environment, name, config_path):
     template = service.ServiceStackTemplate(name, environment, region,
                                             config_path)
-    print(template.as_json())
     _update_stack(region, template)
 
 
@@ -60,6 +57,8 @@ def _create_stack(region, template):
     except cloudformation.RequestException as error:
         sys.stdout.write(str(error) + "\n")
         sys.exit(1)
+    result = cloudformation.estimate_stack_cost(region, template)
+    sys.stdout.write('Stack Cost Calculator URL: {0}\n'.format(result))
 
 
 def _update_stack(region, template):

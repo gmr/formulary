@@ -38,6 +38,26 @@ def create_stack(region, template):
     connection.close()
 
 
+def estimate_stack_cost(region, template):
+    """Estimate the cost of the stack in EC2
+
+    :param str region: The region name to create the stack in
+    :param Template template: The template to use
+    :raises: RequestException
+
+    """
+    connection = cloudformation.connect_to_region(region)
+    template_body = template.as_json()
+    if not connection.validate_template(template_body):
+        raise RequestException('The specified template did not validate')
+    try:
+        result = connection.estimate_template_cost(template_body)
+    except exception.BotoServerError as error:
+        raise RequestException(error)
+    connection.close()
+    return result
+
+
 def update_stack(region, template):
     """Update a stack in the specified region with the given template.
 
