@@ -52,8 +52,8 @@ class ServiceTemplate(security_group.TemplateWithSecurityGroup):
             del kwargs['service']
             resource = _EC2Instance(**kwargs)
             self._add_environment_tag(resource)
-            self.add_resource('{0}{1}'.format(self._name.capitalize(), index),
-                              resource)
+            self.add_resource('{0}{1}'.format(self._to_camel_case(self._name),
+                                              index), resource)
 
     def _add_instance(self, name, config, instance_cfg):
         availability_zone = \
@@ -88,8 +88,8 @@ class ServiceTemplate(security_group.TemplateWithSecurityGroup):
                                                   kwargs)
         resource = _EC2Instance(**kwargs)
         self._add_environment_tag(resource)
-        self.add_resource('{0}{1}'.format(self._name.capitalize(), name),
-                          resource)
+        self.add_resource('{0}{1}'.format(self._to_camel_case(self._name),
+                                          name), resource)
 
     def _add_instances(self):
         config = self._flatten_config(self._config)
