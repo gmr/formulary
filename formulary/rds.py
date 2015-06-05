@@ -33,12 +33,27 @@ class RDSTemplate(security_group.TemplateWithSecurityGroup):
 
     def _add_instance(self):
         config = self._flatten_config(self._config)
+        subnets = self._add_subnet_groups(config)
         if not config.get('multi-az'):
             config['availability_zone'] = \
                 self._network_stack.subnets[0].availability_zone
-        resource = _DBInstance(self.name, config)
+        resource = _DBInstance(self.name, config, subnets, self._security_group)
         self._add_environment_tag(resource)
         self.add_resource(self._to_camel_case(self._name), resource)
+
+    def _add_subnet_groups(self, config):
+        subnets = []
+        if config.get('multi-az'):
+            subnets.append(self._network_stack.subnets[0].id)
+        else:
+            for subnet in self._network_stack.subnets:
+                subnets.append(subnet.id)
+        subnet_group_name = '{0}-subnet-group'.format(self.name)
+        resource = _DBSubnetGroup(subnet_group_name, subnets)
+        self._add_environment_tag(resource)
+        subnet_group_name = self._to_camel_case(subnet_group_name)
+        self.add_resource(subnet_group_name, resource)
+        return subnet_group_name
 
     @property
     def _local_path(self):
@@ -52,7 +67,7 @@ class RDSTemplate(security_group.TemplateWithSecurityGroup):
 
 
 class _DBInstance(cloudformation.Resource):
-    def __init__(self, name, config):
+    def __init__(self, name, config, subnet, security_grp):
         super(_DBInstance, self).__init__('AWS::RDS::DBInstance')
         self._name = name
         self._properties = {
@@ -65,7 +80,8 @@ class _DBInstance(cloudformation.Resource):
             'DBName': config.get('dbname'),
             'DBInstanceClass': config.get('instance-type',
                                           DEFAULT_INSTANCE_TYPE),
-            "DBInstanceIdentifier": name,
+            'DBInstanceIdentifier': name,
+            'DBSubnetGroupName': {'Ref': subnet},
             'Engine': config.get('engine', DEFAULT_ENGINE_TYPE),
             'EngineVersion': config.get('engine-version',
                                         DEFAULT_ENGINE_VERSION),
@@ -75,6 +91,7 @@ class _DBInstance(cloudformation.Resource):
             'MultiAZ': config.get('multi-az', True),
             'Port': config.get('port', DEFAULT_ENGINE_PORT),
             'PubliclyAccessible': config.get('public', False),
+            'VPCSecurityGroups': [security_grp]
         }
 
         if not config.get('multi-az'):
@@ -83,3 +100,13 @@ class _DBInstance(cloudformation.Resource):
 
         self.add_attribute('DeletionPolicy',
                            config.get('deletion-policy', 'Delete').capitalize())
+
+
+class _DBSubnetGroup(cloudformation.Resource):
+    def __init__(self, name, subnets):
+        super(_DBSubnetGroup, self).__init__('AWS::RDS::DBSubnetGroup')
+        self._name = name
+        self._properties = {
+            'DBSubnetGroupDescription': 'Subnet Group for {0}'.format(name),
+            'SubnetIds': subnets
+        }
