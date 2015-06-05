@@ -14,6 +14,11 @@ Subnet = collections.namedtuple('Subnet', ['id',
                                            'environment',
                                            'status',
                                            'available_ips'])
+VPC = collections.namedtuple('VPC', ['id',
+                                     'cidr_block',
+                                     'is_default',
+                                     'instance_tenancy',
+                                     'status'])
 
 
 class NetworkStack(cloudformation.Stack):
@@ -21,7 +26,9 @@ class NetworkStack(cloudformation.Stack):
     with attributes that return the AWS ids.
 
     """
-    def __init__(self, name, region='us-east-1'):
+    CONFIG_PREFIX = 'vpcs'
+
+    def __init__(self, name, config_path, region='us-east-1'):
         """Create a new instance of a Stack for the given region and
         stack name.
 
@@ -29,9 +36,29 @@ class NetworkStack(cloudformation.Stack):
         :param str region: The AWS region, defaults to ``us-east-1``
 
         """
-        super(NetworkStack, self).__init__(name, region)
+        super(NetworkStack, self).__init__(name, None, config_path, region)
         self._vpc_connection = vpc.VPCConnection()
         self._subnets = self._get_subnets(self._get_subnet_ids())
+        self._vpc = self._get_vpc()
+        self._config = self._load_config(self._local_path, 'network')
+
+    @property
+    def cidr_block(self):
+        """Return the CIDR block for the VPC
+
+        :rtype: str
+
+        """
+        return self._vpc.cidr_block
+
+    @property
+    def environment(self):
+        """Returns the environment the stack is for.
+
+        :rtype: str
+
+        """
+        return self._config.get('environment')
 
     @property
     def subnets(self):
@@ -41,6 +68,10 @@ class NetworkStack(cloudformation.Stack):
 
         """
         return self._subnets
+
+    @property
+    def vpc(self):
+        return self._vpc
 
     def _get_subnet_ids(self):
         """Return the AWS physical ID list used to get the subnet details
@@ -72,6 +103,21 @@ class NetworkStack(cloudformation.Stack):
                                  subnet.state,
                                  subnet.available_ip_address_count))
         return values
+
+    def _get_vpc(self):
+        """Fetch the details of the VPC and return them as a namedtuple
+
+        :rtype: VPC
+
+        """
+        for resource in self._resources:
+            if resource.type == 'AWS::EC2::VPC':
+                results = self._vpc_connection.get_all_vpcs(resource.id)
+                return VPC(results[0].id,
+                           results[0].cidr_block,
+                           results[0].is_default,
+                           results[0].instance_tenancy,
+                           results[0].state)
 
 
 class NetworkStackTemplate(cloudformation.Template):
