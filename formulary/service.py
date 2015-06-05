@@ -41,13 +41,15 @@ class ServiceTemplate(security_group.TemplateWithSecurityGroup):
                 'name': '{0}{1}'.format(self.name, index),
                 'ami': self._get_ami_id(),
                 'availability_zone': subnet.availability_zone,
-                'instance_type':config.get('instance-type'),
+                'instance_type': config.get('instance-type'),
                 'subnet': subnet.id,
+                'service': self._name,
                 'sec_group': self._security_group,
                 'storage_size': config.get('storage-capacity')
             }
             kwargs['user_data'] = self._get_user_data(config.get('user-data'),
                                                       kwargs)
+            del kwargs['service']
             resource = _EC2Instance(**kwargs)
             self._add_environment_tag(resource)
             self.add_resource('{0}{1}'.format(self._name.capitalize(), index),
@@ -77,9 +79,11 @@ class ServiceTemplate(security_group.TemplateWithSecurityGroup):
             'instance_type': config.get('instance-type'),
             'subnet': subnet_id,
             'sec_group': self._security_group,
+            'service': self._name,
             'storage_size': config.get('storage-capacity'),
             'private_ip': private_ip
         }
+        del kwargs['service']
         kwargs['user_data'] = self._get_user_data(config.get('user-data'),
                                                   kwargs)
         resource = _EC2Instance(**kwargs)
