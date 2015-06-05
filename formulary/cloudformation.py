@@ -78,11 +78,13 @@ def update_stack(region, template):
 
 
 class Configurable(object):
+
     CONFIG_PREFIX = ''
 
     def __init__(self, name, config_path):
         self._config_path = config_path
         self._name = name
+        self._config = None
 
     @staticmethod
     def _load_config(cfg_path, name):
@@ -129,7 +131,7 @@ class Stack(Configurable):
         """
         super(Stack, self).__init__(name, config_path)
         self._name = name
-        self._parent = None
+        self._parent = parent
         self._connection = cloudformation.connect_to_region(region)
         self._stack = self._fetch_description()
         self._resources = self._fetch_resources()
@@ -207,11 +209,13 @@ class Stack(Configurable):
 class Template(Configurable):
     """Used to create a Cloud Formation configuration template"""
     PARENT_CONFIG_PREFIX = ''
+    STACK_TYPE = ''
 
     def __init__(self, name, parent, config_path):
         """Create a new Cloud Formation configuration template instance"""
         super(Template, self).__init__(name, config_path)
         self._description = 'Formulary created Cloud Formation stack'
+        self._environment = None
         self._name = name
         self._parent = parent
 
@@ -257,9 +261,11 @@ class Template(Configurable):
         :rtype: str
 
         """
-        if self._parent:
-            return '{0}-{1}'.format(self._parent, self._name)
-        return self._name
+        parts = [self._parent] if self._parent else []
+        if self.STACK_TYPE:
+            parts.append(self.STACK_TYPE.lower())
+        parts.append(self._name)
+        return '-'.join(parts)
 
     def set_description(self, description):
         """Set the template description
@@ -277,6 +283,16 @@ class Template(Configurable):
         """
         self._mappings.update(mappings)
 
+    def _add_environment_tag(self, resource):
+        resource.add_tag('Environment', self._environment)
+
+    @staticmethod
+    def _find_in_map(source):
+        if source.startswith('^map '):
+            ref = source[5:].split('.')
+            return {'Fn::FindInMap': ref}
+        return source
+
     def _load_mappings(self):
         """Load the mapping files for the template, pulling in first the top
         level mappings, then the environment specific VPC mappings.
@@ -289,6 +305,14 @@ class Template(Configurable):
         mappings.update(self._load_config(self._local_path, 'mapping') or {})
         return mappings
 
+    def _mapping_replace(self, source):
+        if source.startswith('^map '):
+            value = dict(self._mappings)
+            for key in source[5:].split('.'):
+                value = value[key.strip()]
+            return value
+        return source
+
     @property
     def _parent_path(self):
         """Return the path to the parent template, if set
@@ -298,6 +322,17 @@ class Template(Configurable):
         """
         return path.join(self._config_path, self.PARENT_CONFIG_PREFIX,
                          self._parent) if self._parent else ''
+
+    @staticmethod
+    def _to_camel_case(value):
+        """Convert a underscore delimited value to camelCase
+
+        :param str value: The value to convert
+        :rtype: str
+
+        """
+        return ''.join(x.capitalize() for x in value.replace('-',
+                                                             '_').split('_'))
 
 
 class Resource(object):
@@ -317,6 +352,12 @@ class Resource(object):
         self._properties = {}
         self._tags = {}
         self._type = resource_type
+
+    def _prune_empty_properties(self):
+        for key, value in list(self._properties.items()):
+            if self._properties[key] is None:
+                LOGGER.idebug('Removing empty key for %s', key)
+                del self._properties[key]
 
     def add_attribute(self, name, value):
         """Add a top-level attribute to the resource such as ``DependsOn`` in

@@ -9,7 +9,7 @@ from os import path
 import re
 
 from formulary import cloudformation
-from formulary import network
+from formulary import security_group
 
 LOGGER = logging.getLogger(__name__)
 
@@ -17,25 +17,18 @@ DEFAULT_INSTANCE_TYPE = 't2.small'
 USER_DATA_RE = re.compile(r'\{\^(?P<command>instance|map)\s(?P<key>[\w\.]+)\}')
 
 
-class ServiceStackTemplate(cloudformation.Template):
+class ServiceTemplate(security_group.TemplateWithSecurityGroup):
 
     CONFIG_PREFIX = 'services'
     PARENT_CONFIG_PREFIX = 'vpcs'
 
-    def __init__(self, name, parent, region, config_path):
-        super(ServiceStackTemplate, self).__init__(name, parent, config_path)
+    def __init__(self, name, parent, config_path, region='us-east-1'):
+        super(ServiceTemplate, self).__init__(name, parent, config_path, region)
         self._config = self._load_config(self._local_path, 'service')
-        self.parent = parent
-        self._region = region
-        self._network_stack = network.NetworkStack(parent, config_path, region)
-        self._add_network_mappings()
-
-        if isinstance(self._config.get('security-group'), str):
-            self._security_group = self._config.get('security-group')
-        else:
-            self._security_group = self._add_security_group()
         if self._config.get('description'):
             self._description = self._config['description']
+        self._init_network_stack()
+        self._security_group = self._add_security_group()
         self._add_instances()
 
     def _add_autobalanced_instances(self):
@@ -49,7 +42,7 @@ class ServiceStackTemplate(cloudformation.Template):
                 'availability_zone': subnet.availability_zone,
                 'instance_type': self._config.get('instance-type'),
                 'subnet': subnet.id,
-                'security_group': self._security_group,
+                'sec_group': self._security_group,
                 'storage_size': self._config.get('storage-capacity')
             }
             kwargs['user_data'] = \
@@ -58,32 +51,6 @@ class ServiceStackTemplate(cloudformation.Template):
             self._add_environment_tag(resource)
             self.add_resource('{0}{1}'.format(self._name.capitalize(), index),
                               resource)
-
-    def _add_environment_tag(self, resource):
-        resource.add_tag('Environment', self._network_stack.environment)
-
-    def _add_network_mappings(self):
-        vpc = dict()
-        for key, value in self._network_stack.vpc._asdict().items():
-            cckey = ''.join(x.capitalize() for x in key.split('_'))
-            if key == 'cidr_block':
-                cckey = 'CIDR'
-            vpc[cckey] = value
-        mappings = {
-            'Network': {
-                'Name': {'Value': self._network_stack.name},
-                'VPC': vpc,
-                'AWS': {'Region': self._region}
-            }
-        }
-        self.update_mappings(mappings)
-
-    def _add_instances(self):
-        if self._config.get('instance-strategy') == 'az-balanced':
-            return self._add_autobalanced_instances()
-
-        for name, config in self._config.get('instances', {}).items():
-            self._add_instance(name, config)
 
     def _add_instance(self, name, config):
         availability_zone = \
@@ -108,7 +75,7 @@ class ServiceStackTemplate(cloudformation.Template):
             'availability_zone': availability_zone,
             'instance_type': self._config.get('instance-type'),
             'subnet': subnet_id,
-            'security_group': self._security_group,
+            'sec_group': self._security_group,
             'storage_size': self._config.get('storage-capacity'),
             'private_ip': private_ip
         }
@@ -119,34 +86,12 @@ class ServiceStackTemplate(cloudformation.Template):
         self.add_resource('{0}{1}'.format(self._name.capitalize(), name),
                           resource)
 
-    def _add_security_group(self):
-        environment = self._network_stack.environment
-        desc = ('Security Group for the {0} '
-                'service in {1}').format(self._name.capitalize(),
-                                         environment.capitalize())
-        resource = _SecurityGroup('{0}-service'.format(self.name), desc,
-                                  self._network_stack.vpc.id,
-                                  self._build_ingress_rules())
-        self._add_environment_tag(resource)
-        name = '{0}{1}ServiceSecurityGroup'.format(environment.capitalize(),
-                                                   self._name.capitalize())
-        self.add_resource(name, resource)
-        return name
+    def _add_instances(self):
+        if self._config.get('instance-strategy') == 'az-balanced':
+            return self._add_autobalanced_instances()
 
-    def _build_ingress_rules(self):
-        rules = []
-        group = self._config.get('security-group', {})
-        ingress_rules = list(group.get('ingress', {}))
-        for row in ingress_rules:
-            try:
-                port, source = dict(row).popitem()
-            except KeyError:
-                continue
-            protocol, from_port, to_port = self._get_protocol_and_ports(port)
-            cidr_block = self._find_in_map(source)
-            rules.append(_SecurityGroupRule(protocol, from_port, to_port,
-                                            cidr_block).as_dict())
-        return rules
+        for name, config in self._config.get('instances', {}).items():
+            self._add_instance(name, config)
 
     def _get_ami_id(self):
         amis = self._load_config(self._config_path, 'amis')
@@ -154,26 +99,6 @@ class ServiceStackTemplate(cloudformation.Template):
             return amis[self._region][self._config.get('ami')]
         except KeyError:
             raise ValueError('AMI "%s" not found' % self._config.get('ami'))
-
-    @staticmethod
-    def _find_in_map(source):
-        if source.startswith('^map '):
-            ref = source[5:].split('.')
-            return {'Fn::FindInMap': ref}
-        return source
-
-    @staticmethod
-    def _get_protocol_and_ports(port):
-        protocol = 'tcp'
-        if isinstance(port, int):
-            return protocol, port, port
-        if '/' in port:
-            port, protocol = port.split('/')
-        if '-' in port:
-            from_port, to_port = port.split('-')
-        else:
-            from_port, to_port = port, port
-        return protocol, from_port, to_port
 
     def _get_subnets(self, count):
         subnets = self._network_stack.subnets
@@ -186,14 +111,6 @@ class ServiceStackTemplate(cloudformation.Template):
             with open(path.join(self._local_path, filename), 'r') as handle:
                 return self._render_user_data(handle.read(), kwargs)
         return None
-
-    def _mapping_replace(self, source):
-        if source.startswith('^map '):
-            value = dict(self._mappings)
-            for key in source[5:].split('.'):
-                value = value[key.strip()]
-            return value
-        return source
 
     def _render_user_data(self, content, kwargs):
         mappings = dict(self._mappings)
@@ -211,7 +128,7 @@ class ServiceStackTemplate(cloudformation.Template):
 
 class _EC2Instance(cloudformation.Resource):
     def __init__(self, name, ami, availability_zone, instance_type, subnet,
-                 security_group, user_data,
+                 sec_group, user_data,
                  storage_size=20,
                  private_ip=None):
         super(_EC2Instance, self).__init__('AWS::EC2::Instance')
@@ -219,7 +136,7 @@ class _EC2Instance(cloudformation.Resource):
         nic = {
             'AssociatePublicIpAddress': True,
             'DeviceIndex': '0',
-            'GroupSet': [{'Ref': security_group}],
+            'GroupSet': [sec_group],
             'SubnetId': subnet
         }
         if private_ip:
@@ -242,41 +159,4 @@ class _EC2Instance(cloudformation.Resource):
             'NetworkInterfaces': [nic],
             'UserData': user_data
         }
-        for key, value in list(self._properties.items()):
-            if self._properties[key] is None:
-                LOGGER.info('Removing empty key for %s', key)
-                del self._properties[key]
-
-
-class _SecurityGroup(cloudformation.Resource):
-    def __init__(self, name, description, vpc, ingress):
-        super(_SecurityGroup, self).__init__('AWS::EC2::SecurityGroup')
-        self._name = name
-        self._properties['GroupDescription'] = description
-        self._properties['SecurityGroupIngress'] = ingress
-        self._properties['VpcId'] = vpc
-
-
-class _SecurityGroupRule(object):
-    def __init__(self, protocol, from_port,
-                 to_port=None,
-                 cidr_addr=None,
-                 source_id=None,
-                 source_name=None,
-                 source_owner=None):
-        self._value = {
-            'CidrIp': cidr_addr,
-            'FromPort': from_port,
-            'IpProtocol': protocol,
-            'SourceSecurityGroupId': source_id,
-            'SourceSecurityGroupName': source_name,
-            'SourceSecurityGroupOwnerId': source_owner,
-            'ToPort': to_port or from_port
-        }
-
-    def as_dict(self):
-        value = dict(self._value)
-        for key in self._value.keys():
-            if value[key] is None:
-                del value[key]
-        return value
+        self._prune_empty_properties()
