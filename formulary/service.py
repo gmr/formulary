@@ -16,6 +16,7 @@ LOGGER = logging.getLogger(__name__)
 DEFAULT_INSTANCE_TYPE = 't2.small'
 USER_DATA_RE = re.compile(r'\{\^(?P<command>instance|map)\s(?P<key>[\w\.]+)\}')
 
+
 class ServiceStackTemplate(cloudformation.Template):
 
     CONFIG_PREFIX = 'services'
