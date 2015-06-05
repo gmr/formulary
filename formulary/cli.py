@@ -10,6 +10,7 @@ import sys
 from formulary import __version__
 from formulary import cloudformation
 from formulary import network
+from formulary import service
 
 DESCRIPTION = 'AWS Cloud Formation Stack Management'
 
@@ -20,15 +21,40 @@ def _add_commands(parser):
                                  help='Create a Cloud Formation stack')
     create.add_argument('type', choices=['network', 'service'],
                         help='The type of stack to create')
+    create.add_argument('name', help='The name of the stack to create')
 
     update = commands.add_parser('update',
                                  help='Update a Cloud Formation stack')
     update.add_argument('type', choices=['network', 'service'],
                         help='The type of stack to update')
+    update.add_argument('name', help='The name of the stack to update')
 
 
 def _create_network_stack(region, environment, config_path):
-    template = network.NetworkStackTemplate(environment, config_path)
+    _create_stack(region,
+                  network.NetworkStackTemplate(environment, config_path))
+
+
+def _create_service_stack(region, environment, name, config_path):
+    template = service.ServiceStackTemplate(name, environment, region,
+                                            config_path)
+    print(template.as_json())
+    _create_stack(region, template)
+
+
+def _update_network_stack(region, environment, config_path):
+    _update_stack(region,
+                  network.NetworkStackTemplate(environment, config_path))
+
+
+def _update_service_stack(region, environment, name, config_path):
+    template = service.ServiceStackTemplate(name, environment, region,
+                                            config_path)
+    print(template.as_json())
+    _update_stack(region, template)
+
+
+def _create_stack(region, template):
     try:
         cloudformation.create_stack(region, template)
     except cloudformation.RequestException as error:
@@ -36,8 +62,7 @@ def _create_network_stack(region, environment, config_path):
         sys.exit(1)
 
 
-def _update_network_stack(region, environment, config_path):
-    template = network.NetworkStackTemplate(environment, config_path)
+def _update_stack(region, template):
     try:
         cloudformation.update_stack(region, template)
     except cloudformation.RequestException as error:
@@ -45,13 +70,18 @@ def _update_network_stack(region, environment, config_path):
         sys.exit(1)
 
 
+def _validate_config_dir(config_dir):
+    files = ['amis.yaml', 'mapping.yaml', 'instances.yaml']
+    return any([path.exists(path.join(config_dir, f)) for f in files])
+
+
 def run():
 
     parser = argparse.ArgumentParser(description=DESCRIPTION)
     _add_commands(parser)
     parser.add_argument('-c', '--config-dir',
-                        default=path.normpath('.'),
-                        help='Specify the path to the configuration directory. ' \
+                        default=path.abspath('.'),
+                        help='Specify the path to the configuration directory. '
                              'Default: .')
     parser.add_argument('-e', '--environment', required=True,
                         help='The formulary environment name (Required)')
@@ -66,13 +96,28 @@ def run():
     if args.verbose:
         logging.basicConfig(level=logging.INFO)
 
+    if not _validate_config_dir(args.config_dir):
+        sys.stderr.write('Invalid configuration directory: %s\n' %
+                         args.config_dir)
+        sys.exit(0)
+
     if args.command == 'create':
         if args.type == 'network':
             _create_network_stack(args.region,
+                                  args.name,
+                                  args.config_dir)
+        elif args.type == 'service':
+            _create_service_stack(args.region,
                                   args.environment,
+                                  args.name,
                                   args.config_dir)
     elif args.command == 'update':
         if args.type == 'network':
             _update_network_stack(args.region,
+                                  args.name,
+                                  args.config_dir)
+        elif args.type == 'service':
+            _update_service_stack(args.region,
                                   args.environment,
+                                  args.name,
                                   args.config_dir)
