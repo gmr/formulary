@@ -102,7 +102,7 @@ class NetworkStack(cloudformation.Stack):
                                  subnet.tags.get('Environment'),
                                  subnet.state,
                                  subnet.available_ip_address_count))
-        return values
+        return sorted(values, key=lambda x: x.availability_zone)
 
     def _get_vpc(self):
         """Fetch the details of the VPC and return them as a namedtuple
