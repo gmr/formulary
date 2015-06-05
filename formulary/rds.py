@@ -32,22 +32,13 @@ class RDSTemplate(security_group.TemplateWithSecurityGroup):
             self.set_description(self._config.get('description'))
 
     def _add_instance(self):
-        config = self._flatten_rds_config(self._config)
+        config = self._flatten_config(self._config)
         if not config.get('multi-az'):
             config['availability_zone'] = \
                 self._network_stack.subnets[0].availability_zone
         resource = _DBInstance(self.name, config)
         self._add_environment_tag(resource)
         self.add_resource(self._to_camel_case(self._name), resource)
-
-    def _flatten_rds_config(self, config):
-        output = {}
-        for key, value in config.items():
-            if isinstance(value, dict) and self._parent in value:
-                output[key] = value[self._parent]
-            else:
-                output[key] = value
-        return output
 
     @property
     def _local_path(self):

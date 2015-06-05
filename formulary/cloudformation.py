@@ -293,6 +293,15 @@ class Template(Configurable):
             return {'Fn::FindInMap': ref}
         return source
 
+    def _flatten_config(self, config):
+        output = {}
+        for key, value in config.items():
+            if isinstance(value, dict) and self._parent in value:
+                output[key] = value[self._parent]
+            else:
+                output[key] = value
+        return output
+
     def _load_mappings(self):
         """Load the mapping files for the template, pulling in first the top
         level mappings, then the environment specific VPC mappings.
