@@ -52,6 +52,7 @@ class ServiceTemplate(security_group.TemplateWithSecurityGroup):
             del kwargs['service']
             resource = _EC2Instance(**kwargs)
             self._add_environment_tag(resource)
+            self._add_service_tag(resource)
             self.add_resource('{0}{1}'.format(self._to_camel_case(self._name),
                                               index), resource)
 
@@ -88,6 +89,7 @@ class ServiceTemplate(security_group.TemplateWithSecurityGroup):
                                                   kwargs)
         resource = _EC2Instance(**kwargs)
         self._add_environment_tag(resource)
+        self._add_service_tag(resource)
         self.add_resource('{0}{1}'.format(self._to_camel_case(self._name),
                                           name), resource)
 
@@ -105,6 +107,9 @@ class ServiceTemplate(security_group.TemplateWithSecurityGroup):
             return amis[self._region][self._config.get('ami')]
         except KeyError:
             raise ValueError('AMI "%s" not found' % self._config.get('ami'))
+
+    def _add_service_tag(self, resource):
+        resource.add_tag('Service', self._name)
 
     def _get_subnets(self, count):
         subnets = self._network_stack.subnets
