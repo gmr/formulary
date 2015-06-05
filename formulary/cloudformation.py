@@ -57,20 +57,59 @@ def update_stack(region, template):
     connection.close()
 
 
-class Stack(object):
+class Configurable(object):
+    CONFIG_PREFIX = ''
+
+    def __init__(self, name, config_path):
+        self._config_path = config_path
+        self._name = name
+
+    @staticmethod
+    def _load_config(cfg_path, name):
+        """Load YAML configuration for the specified name from the path.
+
+        :param str cfg_path: The path prefix for the config file
+        :param str name: The name of the config file
+        :rtype: dict
+
+        """
+        config_file = path.normpath(path.join(cfg_path,
+                                              '{0}.yaml'.format(name)))
+        LOGGER.info('Loading configuration from %s', config_file)
+        if path.exists(config_file):
+            with open(config_file) as handle:
+                return yaml.load(handle)
+
+    @property
+    def _local_path(self):
+        """Return a path to the config file local to the Template type being
+        created.
+
+        :rtype: str
+
+        """
+        return path.join(self._config_path, self.CONFIG_PREFIX, self._name)
+
+
+class Stack(Configurable):
     """Represents a Cloud Formation Stack. This is meant to be extended by
     more specific ``Stack`` classes such as the
     ``formulary.network.NetworkStack``
 
     """
-    def __init__(self, name, region='us-east-1'):
+
+    def __init__(self, name, parent, config_path, region='us-east-1'):
         """Create a new instance of a Stack for the given region and stack name
 
         :param str name: The stack name
+        :param str name: A parent stack name
+        :param str config_path: The path to the configuration directory
         :param str region: The AWS region, defaults to ``us-east-1``
 
         """
+        super(Stack, self).__init__(name, config_path)
         self._name = name
+        self._parent = None
         self._connection = cloudformation.connect_to_region(region)
         self._stack = self._fetch_description()
         self._resources = self._fetch_resources()
@@ -109,6 +148,8 @@ class Stack(object):
         :rtype: str
 
         """
+        if self._parent:
+            return '{0}-{1}'.format(self._parent, self._name)
         return self._name
 
     @property
@@ -143,14 +184,13 @@ class Stack(object):
         return resources
 
 
-class Template(object):
+class Template(Configurable):
     """Used to create a Cloud Formation configuration template"""
-    CONFIG_PREFIX = ''
-    PARENT_CONFIG_PREFIX = 'vpcs'
+    PARENT_CONFIG_PREFIX = ''
 
     def __init__(self, name, parent, config_path):
         """Create a new Cloud Formation configuration template instance"""
-        self._config_path = config_path
+        super(Template, self).__init__(name, config_path)
         self._description = 'Formulary created Cloud Formation stack'
         self._name = name
         self._parent = parent
@@ -197,6 +237,8 @@ class Template(object):
         :rtype: str
 
         """
+        if self._parent:
+            return '{0}-{1}'.format(self._parent, self._name)
         return self._name
 
     def set_description(self, description):
@@ -215,22 +257,6 @@ class Template(object):
         """
         self._mappings.update(mappings)
 
-    @staticmethod
-    def _load_config(cfg_path, name):
-        """Load YAML configuration for the specified name from the path.
-
-        :param str cfg_path: The path prefix for the config file
-        :param str name: The name of the config file
-        :rtype: dict
-
-        """
-        config_file = path.normpath(path.join(cfg_path,
-                                              '{0}.yaml'.format(name)))
-        LOGGER.info('Loading configuration from %s', config_file)
-        if path.exists(config_file):
-            with open(config_file) as handle:
-                return yaml.load(handle)
-
     def _load_mappings(self):
         """Load the mapping files for the template, pulling in first the top
         level mappings, then the environment specific VPC mappings.
@@ -242,16 +268,6 @@ class Template(object):
         mappings.update(self._load_config(self._parent_path, 'mapping') or {})
         mappings.update(self._load_config(self._local_path, 'mapping') or {})
         return mappings
-
-    @property
-    def _local_path(self):
-        """Return a path to the config file local to the Template type being
-        created.
-
-        :rtype: str
-
-        """
-        return path.join(self._config_path, self.CONFIG_PREFIX, self.name)
 
     @property
     def _parent_path(self):
