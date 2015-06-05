@@ -128,7 +128,7 @@ class NetworkTemplate(cloudformation.Template):
     """
     CONFIG_PREFIX = 'vpcs'
 
-    def __init__(self, name, config_path):
+    def __init__(self, name, environment, config_path, region=None):
         """Create a new instance of a network stack.
 
         :param str name: The environment name for the stack
