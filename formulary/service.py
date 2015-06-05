@@ -21,6 +21,7 @@ class ServiceTemplate(security_group.TemplateWithSecurityGroup):
 
     CONFIG_PREFIX = 'services'
     PARENT_CONFIG_PREFIX = 'vpcs'
+    STACK_TYPE = 'Service'
 
     def __init__(self, name, parent, config_path, region='us-east-1'):
         super(ServiceTemplate, self).__init__(name, parent, config_path, region)
@@ -31,8 +32,8 @@ class ServiceTemplate(security_group.TemplateWithSecurityGroup):
         self._security_group = self._add_security_group()
         self._add_instances()
 
-    def _add_autobalanced_instances(self):
-        count = self._config.get('instance-count', 1)
+    def _add_autobalanced_instances(self, config):
+        count = config.get('instance-count', 1)
         subnets = self._get_subnets(count)
         for index in range(0, count):
             subnet = subnets.pop(0)
@@ -40,23 +41,23 @@ class ServiceTemplate(security_group.TemplateWithSecurityGroup):
                 'name': '{0}{1}'.format(self.name, index),
                 'ami': self._get_ami_id(),
                 'availability_zone': subnet.availability_zone,
-                'instance_type': self._config.get('instance-type'),
+                'instance_type':config.get('instance-type'),
                 'subnet': subnet.id,
                 'sec_group': self._security_group,
-                'storage_size': self._config.get('storage-capacity')
+                'storage_size': config.get('storage-capacity')
             }
-            kwargs['user_data'] = \
-                self._get_user_data(self._config.get('user-data'), kwargs)
+            kwargs['user_data'] = self._get_user_data(config.get('user-data'),
+                                                      kwargs)
             resource = _EC2Instance(**kwargs)
             self._add_environment_tag(resource)
             self.add_resource('{0}{1}'.format(self._name.capitalize(), index),
                               resource)
 
-    def _add_instance(self, name, config):
+    def _add_instance(self, name, config, instance_cfg):
         availability_zone = \
-            self._mapping_replace(config.get('availability_zone'))
-        subnet_id = config.get('subnet')
-        private_ip = self._mapping_replace(config.get('private_ip'))
+            self._mapping_replace(instance_cfg.get('availability_zone'))
+        subnet_id = instance_cfg.get('subnet')
+        private_ip = self._mapping_replace(instance_cfg.get('private_ip'))
 
         if subnet_id and not availability_zone:
             for subnet in self._network_stack.subnets:
@@ -73,13 +74,13 @@ class ServiceTemplate(security_group.TemplateWithSecurityGroup):
             'name': '{0}-{1}'.format(self.name, name.lower()),
             'ami': self._get_ami_id(),
             'availability_zone': availability_zone,
-            'instance_type': self._config.get('instance-type'),
+            'instance_type': config.get('instance-type'),
             'subnet': subnet_id,
             'sec_group': self._security_group,
-            'storage_size': self._config.get('storage-capacity'),
+            'storage_size': config.get('storage-capacity'),
             'private_ip': private_ip
         }
-        kwargs['user_data'] = self._get_user_data(self._config.get('user-data'),
+        kwargs['user_data'] = self._get_user_data(config.get('user-data'),
                                                   kwargs)
         resource = _EC2Instance(**kwargs)
         self._add_environment_tag(resource)
@@ -87,11 +88,12 @@ class ServiceTemplate(security_group.TemplateWithSecurityGroup):
                           resource)
 
     def _add_instances(self):
-        if self._config.get('instance-strategy') == 'az-balanced':
-            return self._add_autobalanced_instances()
+        config = self._flatten_config(self._config)
+        if config.get('instance-strategy') == 'az-balanced':
+            return self._add_autobalanced_instances(config)
 
-        for name, config in self._config.get('instances', {}).items():
-            self._add_instance(name, config)
+        for name, instance_cfg in config.get('instances', {}).items():
+            self._add_instance(name, config, instance_cfg)
 
     def _get_ami_id(self):
         amis = self._load_config(self._config_path, 'amis')
