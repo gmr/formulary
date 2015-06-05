@@ -160,7 +160,7 @@ class NetworkStackTemplate(cloudformation.Template):
         resource = _VPC(vpc_name,
                         self._network['vpc']['dns-support'],
                         self._network['vpc']['dns-hostnames'],
-                        self._network['cidr'])
+                        self._network['CIDR'])
         resource.add_tag('Environment', self._network['environment'])
         self.add_resource(vpc_id, resource)
         return vpc_id, vpc_name
@@ -229,7 +229,7 @@ class NetworkStackTemplate(cloudformation.Template):
         """Iterate through the ACL entries and add them"""
         for index, acl in enumerate(self._network['network-acls']):
             self.add_resource('{0}{1}'.format(self._acl, index),
-                              _NetworkACLEntry(self._acl, acl['cidr'],
+                              _NetworkACLEntry(self._acl, acl['CIDR'],
                                                acl['number'], acl['protocol'],
                                                acl['action'], acl['egress'],
                                                acl['ports']))
@@ -264,7 +264,7 @@ class NetworkStackTemplate(cloudformation.Template):
             subnet_id = '{0}{1}Subnet'.format(self._vpc, subnet)
             subnet_ids.append(subnet_id)
             resource = _Subnet(self._vpc_name, subnet, self._vpc,
-                               config['az'], config['cidr'])
+                               config['availability_zone'], config['CIDR'])
             resource.add_tag('Environment', self._network['environment'])
             self.add_resource(subnet_id, resource)
             self.add_resource('{0}Assoc'.format(subnet_id),
