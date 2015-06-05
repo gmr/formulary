@@ -120,7 +120,7 @@ class NetworkStack(cloudformation.Stack):
                            results[0].state)
 
 
-class NetworkStackTemplate(cloudformation.Template):
+class NetworkTemplate(cloudformation.Template):
     """Create a Network cloud-formation stack consisting of the VPC,
     DHCP options, gateway configuration, routing tables, subnets, and network
     ACLs.
@@ -135,7 +135,7 @@ class NetworkStackTemplate(cloudformation.Template):
         :param str config_path: Path to the formulary configuration directory
 
         """
-        super(NetworkStackTemplate, self).__init__(name, None, config_path)
+        super(NetworkTemplate, self).__init__(name, None, config_path)
         self._network = self._load_config(self._local_path, 'network')
         self._description = self._network['description']
         self._vpc, self._vpc_name = self._add_vpc()
@@ -155,7 +155,7 @@ class NetworkStackTemplate(cloudformation.Template):
         :rtype: str, str
 
         """
-        vpc_id = ''.join(x.capitalize() for x in self._name.split('-'))
+        vpc_id = self._to_camel_case(self._name)
         vpc_name = self._name.replace('-', '_')
         resource = _VPC(vpc_name,
                         self._network['vpc']['dns-support'],
