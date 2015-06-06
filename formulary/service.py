@@ -6,6 +6,7 @@ import base64
 import logging
 import math
 from os import path
+import random
 import re
 
 from formulary import cloudformation
@@ -56,11 +57,11 @@ class ServiceTemplate(security_group.TemplateWithSecurityGroup):
             self.add_resource('{0}{1}'.format(self._to_camel_case(self._name),
                                               index), resource)
 
-    def _add_instance(self, name, config, instance_cfg):
+    def _add_instance(self, name, config):
         availability_zone = \
-            self._mapping_replace(instance_cfg.get('availability_zone'))
-        subnet_id = instance_cfg.get('subnet')
-        private_ip = self._mapping_replace(instance_cfg.get('private_ip'))
+            self._mapping_replace(config.get('availability_zone', ''))
+        subnet_id = config.get('subnet')
+        private_ip = self._mapping_replace(config.get('private_ip', ''))
 
         if subnet_id and not availability_zone:
             for subnet in self._network_stack.subnets:
@@ -74,7 +75,7 @@ class ServiceTemplate(security_group.TemplateWithSecurityGroup):
                     break
 
         kwargs = {
-            'name': '{0}-{1}'.format(self.name, name.lower()),
+            'name': name,
             'ami': self._get_ami_id(),
             'availability_zone': availability_zone,
             'instance_type': config.get('instance-type'),
@@ -84,22 +85,34 @@ class ServiceTemplate(security_group.TemplateWithSecurityGroup):
             'storage_size': config.get('storage-capacity'),
             'private_ip': private_ip
         }
-        del kwargs['service']
         kwargs['user_data'] = self._get_user_data(config.get('user-data'),
                                                   kwargs)
+        del kwargs['service']
         resource = _EC2Instance(**kwargs)
         self._add_environment_tag(resource)
         self._add_service_tag(resource)
-        self.add_resource('{0}{1}'.format(self._to_camel_case(self._name),
-                                          name), resource)
+        self.add_resource(self._to_camel_case(name), resource)
 
     def _add_instances(self):
         config = self._flatten_config(self._config)
         if config.get('instance-strategy') == 'az-balanced':
             return self._add_autobalanced_instances(config)
+        elif config.get('instance-strategy') == 'same-az':
+            self._maybe_add_availability_zone(config)
+            for index in range(0, config.get('instance-count', 1)):
+                self._add_instance('{0}{1}'.format(self.name, index), config)
+        else:
+            for name, instance_cfg in config.get('instances', {}).items():
+                cfg = dict(config)
+                cfg.update(instance_cfg)
+                self._add_instance('{0}-service-{1}'.format(self._parent,
+                                                            name), cfg)
 
-        for name, instance_cfg in config.get('instances', {}).items():
-            self._add_instance(name, config, instance_cfg)
+    def _maybe_add_availability_zone(self, config):
+        if 'availability_zone' not in config:
+            offset = random.randint(0, len(self._network_stack.subnets) - 1)
+            config['availability_zone'] = \
+                self._network_stack.subnets[offset].availability_zone
 
     def _get_ami_id(self):
         amis = self._load_config(self._config_path, 'amis')
