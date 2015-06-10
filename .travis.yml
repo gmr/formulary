@@ -1,0 +1,26 @@
+%YAML 1.2
+---
+sudo: false
+language: python
+python:
+  - 2.7
+  - pypy
+  - 3.2
+  - 3.3
+  - 3.4
+install:
+  - if [[ $TRAVIS_PYTHON_VERSION == '2.6' ]]; then pip install unittest2 --download-cache $HOME/.pip-cache; fi
+  - pip install --download-cache $HOME/.pip-cache -r test-requirements.txt
+script: nosetests --with-coverage --cover-package=formulary --cover-branches
+after_success:
+  - codecov
+deploy:
+  distributions: sdist bdist_wheel
+  provider: pypi
+  on:
+    python: 2.7
+    tags: true
+    all_branches: true
+  user: sprockets
+  password:
+    secure: "UFxlqmRDVHsXOlKedFtVwJEBu4qqu1/l3DFvgLnysqyLUQd6VhvIV4YaXGJiHFCFc5wPn0TKy+SvAwoM8Ecni0jpd0DdKcB74HZoOPongZN6c4kdOstkBsTbi28+5hsaFIzQqf5uJI+lcpxsQ5DT4e+7rzYi3XR/WQ08x8DVEjQ="
