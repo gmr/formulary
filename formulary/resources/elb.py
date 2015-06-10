@@ -25,7 +25,7 @@ class ELB(base.Resource):
 
 class ELBHeathCheck(base.Property):
 
-    def __init__(self, interval=30, target='HTTP:80 /', timeout=5,
+    def __init__(self, interval=30, target='HTTP:80', timeout=5,
                  healthy=10, unhealthy=2):
         super(ELBHeathCheck, self).__init__()
         self._values = {

@@ -54,8 +54,8 @@ class Service(base.Builder):
         listeners = [resources.ELBListener(**kwargs)]
 
         kwargs = {'interval': config.get('interval'),
-                  'target': '{0}:{1} {2}'.format(protocol.upper(), instance_port,
-                                                 config.get('check', '/')),
+                  'target': '{0}:{1}{2}'.format(protocol.upper(), instance_port,
+                                                config.get('check', '')),
                   'timeout': config.get('timeout'),
                   'healthy': config.get('healthy'),
                   'unhealthy': config.get('unhealthy')}
