@@ -4,7 +4,9 @@ Main Formulary Controller
 """
 import logging
 from os import path
+import sys
 
+import boto.provider
 import yaml
 
 from formulary import builders
@@ -26,17 +28,18 @@ SERVICE_FOLDER = 'services'
 class Controller(object):
     """The controller implements the top-level application behavior"""
 
-    def __init__(self, config_path, action, environment,
-                 resource_type, resource, verbose, dry_run):
+    def __init__(self, config_path, action, environment, resource_type,
+                 resource, verbose, dry_run, profile):
         config_path = self._normalize_path(config_path)
         self._validate_arguments(config_path, action, environment,
                                  resource_type, resource)
 
         self._action = action
-        self._resource_type = resource_type
         self._config_path = config_path
         self._environment = environment
+        self._profile = profile
         self._resource = resource
+        self._resource_type = resource_type
         self._verbose = verbose
         self._dry_run = dry_run
 
@@ -61,7 +64,25 @@ class Controller(object):
             return
 
         if self._action == 'create':
-            cloudformation.create_stack(self._region, self._template)
+            try:
+                cloudformation.create_stack(self._region, self._template,
+                                            self._profile)
+            except boto.provider.ProfileNotFoundError:
+                self._error('AWS profile not found')
+            print('Stack created')
+
+        elif self._action == 'update':
+            try:
+                cloudformation.update_stack(self._region, self._template,
+                                            self._profile)
+            except boto.provider.ProfileNotFoundError:
+                self._error('AWS profile not found')
+            print('Stack updated')
+
+        result = cloudformation.estimate_stack_cost(self._region,
+                                                    self._template,
+                                                    self._profile)
+        print('Stack cost calculator URL: {0}'.format(result))
 
     def _build_environment_resources(self):
         builder = builders.Environment(self._config, self._resource,
@@ -85,6 +106,10 @@ class Controller(object):
 
         if self._resource_type == 'service':
             self._build_service_resources()
+
+    def _error(self, message):
+        sys.stderr.write('ERROR: {0}\n'.format(message))
+        sys.exit(1)
 
     def _flatten_config(self, config):
         """Take a given config dictionary and if it contains environment

@@ -15,15 +15,17 @@ StackResource = collections.namedtuple('StackResource',
                                        ('id', 'type', 'name', 'status'))
 
 
-def create_stack(region, template):
+def create_stack(region, template, profile):
     """Create a stack in the specified region with the given template.
 
     :param str region: The region name to create the stack in
     :param Template template: The template to use
+    :param str profile: The credentials profile to use
     :raises: RequestException
 
     """
-    connection = cloudformation.connect_to_region(region)
+    kwargs = {'profile_name': profile} if profile else {}
+    connection = cloudformation.connect_to_region(region, **kwargs)
     template_body = template.as_json()
     if not connection.validate_template(template_body):
         raise RequestException('The specified template did not validate')
@@ -34,15 +36,17 @@ def create_stack(region, template):
     connection.close()
 
 
-def estimate_stack_cost(region, template):
+def estimate_stack_cost(region, template, profile):
     """Estimate the cost of the stack in EC2
 
     :param str region: The region name to create the stack in
     :param Template template: The template to use
+    :param str profile: The credentials profile to use
     :raises: RequestException
 
     """
-    connection = cloudformation.connect_to_region(region)
+    kwargs = {'profile_name': profile} if profile else {}
+    connection = cloudformation.connect_to_region(region, **kwargs)
     template_body = template.as_json()
     if not connection.validate_template(template_body):
         raise RequestException('The specified template did not validate')
@@ -54,15 +58,17 @@ def estimate_stack_cost(region, template):
     return result
 
 
-def update_stack(region, template):
+def update_stack(region, template, profile):
     """Update a stack in the specified region with the given template.
 
     :param str region: The region name to create the stack in
     :param Template template: The template to use
+    :param str profile: The credentials profile to use
     :raises: RequestException
 
     """
-    connection = cloudformation.connect_to_region(region)
+    kwargs = {'profile_name': profile} if profile else {}
+    connection = cloudformation.connect_to_region(region, **kwargs)
     template_body = template.as_json()
     if not connection.validate_template(template_body):
         raise RequestException('The specified template did not validate')

@@ -29,7 +29,8 @@ class CLI(object):
                                         args.type,
                                         args.name,
                                         args.verbose,
-                                        args.dry_run)
+                                        args.dry_run,
+                                        args.profile)
         except ValueError as error:
             sys.stderr.write('{}\n'.format(error))
             sys.exit(1)
@@ -61,6 +62,8 @@ class CLI(object):
         parser.add_argument('-d', '--dry-run', action='store_true')
         parser.add_argument('-e', '--environment',
                             help='The formulary environment name')
+        parser.add_argument('-p', '--profile',
+                            help='The AWS credentials profile to use')
         parser.add_argument('-v', '--verbose', action='store_true')
         return parser
 

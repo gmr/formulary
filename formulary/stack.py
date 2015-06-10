@@ -15,9 +15,10 @@ LOGGER = logging.getLogger(__name__)
 
 class _API(object):
 
-    def __init__(self, region):
-        self._cf = cloudformation.connect_to_region(region)
-        self._vpc = vpc.connect_to_region(region)
+    def __init__(self, region, profile):
+        kwargs = {'profile_name': profile} if profile else {}
+        self._cf = cloudformation.connect_to_region(region, **kwargs)
+        self._vpc = vpc.connect_to_region(region, **kwargs)
 
     def close(self):
         self._cf.close()
@@ -43,9 +44,10 @@ class _API(object):
 
 class Stack(object):
 
-    def __init__(self, name, config, template=None):
+    def __init__(self, name, config, template=None, profile=None):
         self._config = config
         self._name = name
+        self._profile = profile
         self._region = config.get('region')
 
         self._api = None
@@ -448,7 +450,7 @@ class Stack(object):
 
         """
         LOGGER.debug('Processing API data')
-        self._api = _API(self._region)
+        self._api = _API(self._region, self._profile)
         stack = self._describe_stack()
         self._description = stack.description
         self._id = stack.stack_id
