@@ -11,8 +11,8 @@ from formulary import utils
 
 class Environment(base.Builder):
 
-    def __init__(self, config, name):
-        super(Environment, self).__init__(config, name, None)
+    def __init__(self, config, name, mappings):
+        super(Environment, self).__init__(config, name, None, mappings)
         self._vpc, self._vpc_name = self._add_vpc()
         self._add_dhcp()
         self._gateway = self._add_gateway()
@@ -30,7 +30,7 @@ class Environment(base.Builder):
         :rtype: str, str
 
         """
-        vpc_name = self._name.replace('-', '_')
+        vpc_name = self._name.replace('_', '-')
         resource = resources.VPC(vpc_name,
                                  self._config['vpc']['dns-support'],
                                  self._config['vpc']['dns-hostnames'],
@@ -49,7 +49,7 @@ class Environment(base.Builder):
 
         """
         config = self._config['dhcp-options']
-        options = '{0}_dhcp'.format(self._vpc_name)
+        options = '{0}-dhcp'.format(self._vpc_name)
         self._add_resource(options,
                            resources.DHCPOptions(config['domain-name'],
                                                  config['name-servers'],
@@ -63,9 +63,10 @@ class Environment(base.Builder):
         :param str dhcp_id: The DHCP Options ID
 
         """
-        self._add_resource('{0}_assoc'.format(dhcp_id),
-                           resources.DHCPOptionsAssociation(dhcp_id,
-                                                            self._vpc_name))
+        self._add_resource('{0}-dhcp-assoc'.format(dhcp_id),
+                           resources.DHCPOptionsAssociation(
+                               utils.camel_case(dhcp_id),
+                               utils.camel_case(self._vpc_name)))
 
     def _add_gateway(self):
         """Add a gateway to the template for the specified VPC
@@ -73,7 +74,7 @@ class Environment(base.Builder):
         :rtype: str
 
         """
-        gateway = '{0}_gateway'.format(self._vpc_name)
+        gateway = '{0}-gateway'.format(self._vpc_name)
         self._add_resource(gateway, resources.Gateway())
         return gateway
 
@@ -83,10 +84,11 @@ class Environment(base.Builder):
         :rtype: str
 
         """
-        attachment = '{0}_attachment'.format(self._gateway)
+        attachment = '{0}-attachment'.format(self._gateway)
         self._add_resource(attachment,
-                           resources.GatewayAttachment(self._vpc,
-                                                       self._gateway))
+                           resources.GatewayAttachment(
+                               utils.camel_case(self._vpc_name),
+                               utils.camel_case(self._gateway)))
         return attachment
 
     def _add_network_acl(self):
@@ -97,7 +99,7 @@ class Environment(base.Builder):
         """
         resource = resources.NetworkACL(self._vpc_name, self._vpc)
         resource.add_tag('Environment', self._config['environment'])
-        acl = '{0}_acl'.format(self._vpc_name)
+        acl = '{0}-network-acl'.format(self._vpc_name)
         self._add_resource(acl, resource)
         return acl
 
@@ -105,25 +107,24 @@ class Environment(base.Builder):
         """Iterate through the ACL entries and add them"""
         for index, acl in enumerate(self._config['network-acls']):
             self._add_resource('{0}{1}'.format(self._acl, index),
-                               resources.NetworkACLEntry(self._acl,
-                                                         acl['CIDR'],
-                                                         acl['number'],
-                                                         acl['action'],
-                                                         acl['egress'],
-                                                         acl['ports']))
+                               resources.NetworkACLEntry(
+                                   utils.camel_case(self._acl),
+                                   acl['CIDR'], acl['number'], acl['action'],
+                                   acl['egress'], acl['ports']))
 
     def _add_public_route(self):
         """Add the public route specified in the mapping ``pubic/cidr`` for
         the specified VPC, route table, gateway and internet gateway.
 
         """
-        self._add_resource('{0}_route'.format(self._vpc_name),
-                           resources.Route(self._route_table,
-                                           {'Fn::FindInMap': ['SubnetConfig',
-                                                              'Public',
-                                                              'CIDR']},
-                                           self._gateway,
-                                           self._internet_gateway))
+        self._add_resource('{0}-route'.format(self._vpc_name),
+                           resources.Route(
+                               utils.camel_case(self._route_table),
+                               {'Fn::FindInMap': ['SubnetConfig',
+                                                  'Public',
+                                                  'CIDR']},
+                               utils.camel_case(self._gateway),
+                               utils.camel_case(self._internet_gateway)))
 
     def _add_route_table(self,):
         """Add the the route table for the specified VPC
@@ -131,8 +132,10 @@ class Environment(base.Builder):
         :rtype: str
 
         """
-        route_table = '{0}_route_table'.format(self._vpc_name)
-        self._add_resource(route_table, resources.RouteTable(self._vpc))
+        route_table = '{0}-route-table'.format(self._vpc_name)
+        self._add_resource(route_table,
+                           resources.RouteTable(
+                               utils.camel_case(self._vpc_name)))
         return route_table
 
     def _add_subnets(self):
@@ -140,13 +143,14 @@ class Environment(base.Builder):
         subnet_ids = []
         for subnet in self._config['subnets']:
             config = self._config['subnets'][subnet]
-            subnet_id = '{0}{1}_subset'.format(self._vpc_name, subnet)
+            subnet_id = '{0}{1}-subnet'.format(self._vpc_name, subnet)
             subnet_ids.append(utils.camel_case(subnet_id))
             resource = resources.Subnet(self._vpc_name, subnet, self._vpc,
                                         config['availability_zone'],
                                         config['CIDR'])
             resource.add_tag('Environment', self._config['environment'])
             self._add_resource(subnet_id, resource)
-            self._add_resource('{0}_assoc'.format(subnet_id),
+            self._add_resource('{0}-assoc'.format(subnet_id),
                                resources.SubnetRouteTableAssociation(
-                                   subnet_id, self._route_table))
+                                   utils.camel_case(subnet_id),
+                                   utils.camel_case((self._route_table))))
