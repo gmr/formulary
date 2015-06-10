@@ -34,7 +34,7 @@ def find_in_map(value):
     return value
 
 
-def parse_port_value(value):
+def parse_port_value(value, default_protocol=None):
     """Parse a string containing port information and return a normalized
     tuple of ``protocol``, ``from_port``, and ``to_port``.
 
@@ -43,9 +43,9 @@ def parse_port_value(value):
 
     """
     if isinstance(value, int):
-        return DEFAULT_PROTOCOL, value, value
+        return default_protocol or DEFAULT_PROTOCOL, value, value
 
-    protocol = DEFAULT_PROTOCOL
+    protocol = default_protocol or DEFAULT_PROTOCOL
     from_port, to_port = value, value
 
     if '-' in value:
@@ -55,10 +55,14 @@ def parse_port_value(value):
             from_port, from_protocol = from_port.split('/')
         if '/' in to_port:
             to_port, to_protocol = to_port.split('/')
-        protocol = from_protocol or to_protocol or DEFAULT_PROTOCOL
+        protocol = (from_protocol or to_protocol or
+                    default_protocol or DEFAULT_PROTOCOL)
 
     elif '/' in value:
         port, protocol = value.split('/')
         from_port, to_port = port, port
 
-    return protocol.lower(), int(from_port), int(to_port)
+    if isinstance(protocol, str):
+        protocol = protocol.lower()
+
+    return protocol, int(from_port), int(to_port)
