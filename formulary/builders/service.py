@@ -184,8 +184,7 @@ class Service(base.Builder):
 
     def _maybe_add_elbs(self):
         for name, config in self._config.get('elb', {}).items():
-            self._add_elb('{0}-{1}-elb'.format(self._environment, name),
-                          config)
+            self._add_elb('{0}-{1}'.format(self._environment, name), config)
 
     def _render_user_data(self, content, kwargs):
         mappings = dict(self._mappings)
