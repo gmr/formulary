@@ -8,6 +8,7 @@ from os import path
 import yaml
 
 from formulary import builders
+from formulary import cloudformation
 from formulary import stack
 from formulary import template
 
@@ -44,7 +45,7 @@ class Controller(object):
         self._config = self._load_config()
         self._environment_config = self._load_environment_config()
         self._mappings = self._load_mappings()
-        self._template = template.Template()
+        self._template = template.Template(self._template_name)
         self._stack = self._get_stack()
 
     def execute(self):
@@ -57,9 +58,14 @@ class Controller(object):
         template_value = self._template.as_json()
         if self._dry_run:
             print(template_value)
+            return
+
+        if self._action == 'create':
+            cloudformation.create_stack(self._region, self._template)
 
     def _build_environment_resources(self):
-        builder = builders.Environment(self._config, self._resource)
+        builder = builders.Environment(self._config, self._resource,
+                                       self._mappings)
         self._template.update_resources(builder.resources)
 
     def _build_service_resources(self):
@@ -205,6 +211,18 @@ class Controller(object):
 
         """
         return path.join('{}s'.format(self._resource_type), self._resource)
+
+    @property
+    def _template_name(self):
+        """Return the template name based upon the
+
+        :rtype: str
+
+        """
+        if self._environment:
+            return '{0}-{1}-{2}'.format(self._environment, self._resource_type,
+                                        self._resource)
+        return self._resource
 
     @classmethod
     def _validate_arguments(cls, config_path, action, environment,
