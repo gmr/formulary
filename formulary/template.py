@@ -10,9 +10,10 @@ class Template(object):
     PARENT_CONFIG_PREFIX = ''
     STACK_TYPE = ''
 
-    def __init__(self):
+    def __init__(self, name):
         """Create a new Cloud Formation configuration template instance"""
         self._description = 'Formulary created Cloud Formation stack'
+        self._name = name
 
         self._conditions = {}
         self._mappings = {}
@@ -48,6 +49,15 @@ class Template(object):
                            'Parameters': self._parameters,
                            'Resources': resources},
                           indent=indent, sort_keys=True)
+
+    @property
+    def name(self):
+        """Return the template name
+
+        :rtype: str
+
+        """
+        return self._name
 
     def set_description(self, description):
         """Set the template description
