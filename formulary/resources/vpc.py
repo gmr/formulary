@@ -38,14 +38,14 @@ class GatewayAttachment(base.Resource):
 class NetworkACL(base.Resource):
     def __init__(self, vpc_name, vpc_id):
         super(NetworkACL, self).__init__('AWS::EC2::NetworkAcl')
-        self._name = '{0}_acl'.format(vpc_name)
+        self._name = '{0}-acl'.format(vpc_name)
         self._properties['VpcId'] = {'Ref': vpc_id}
 
 
 class NetworkACLEntry(base.Resource):
     def __init__(self, acl_id, cidr_block, rule_number, action, egress, ports):
         super(NetworkACLEntry, self).__init__('AWS::EC2::NetworkAclEntry')
-        protocol, from_port, to_port = utils.parse_port_value(ports)
+        protocol, from_port, to_port = utils.parse_port_value(ports, -1)
         self._properties['NetworkAclId'] = {'Ref': acl_id}
         self._properties['CidrBlock'] = cidr_block
         self._properties['RuleNumber'] = rule_number
@@ -73,7 +73,7 @@ class RouteTable(base.Resource):
 class Subnet(base.Resource):
     def __init__(self, vpc_name, subnet, vpc_id, az, cidr_block):
         super(Subnet, self).__init__('AWS::EC2::Subnet')
-        self._name = '{0}{1}_subnet'.format(vpc_name, subnet)
+        self._name = '{0}{1}-subnet'.format(vpc_name, subnet)
         self._properties['AvailabilityZone'] = az
         self._properties['CidrBlock'] = cidr_block
         self._properties['VpcId'] = {'Ref': vpc_id}
