@@ -83,7 +83,7 @@ class Service(base.Builder):
 
         """
         kwargs = {
-            'name': name,
+            'name': '{0}-service-{1}'.format(self._environment, name),
             'ami': self._get_ami_id(),
             'availability_zone': subnet.availability_zone,
             'instance_type': config.get('instance-type'),
