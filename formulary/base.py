@@ -74,7 +74,6 @@ class Builder(object):
             ref = value[5:].split('.')
             if len(ref) != 3:
                 raise ValueError('Invalid map reference: {}'.format(value[5:]))
-            print('Returning', self._mappings[ref[0]][ref[1]][ref[2]])
             return self._mappings[ref[0]][ref[1]][ref[2]]
         return value
 
