@@ -86,10 +86,13 @@ class Stack(object):
         """
         vpc_data = dict()
         for key, value in self.vpc._asdict().items():
+            if key == 'tags':
+                continue
             cckey = utils.camel_case(key)
             if key == 'cidr_block':
                 cckey = 'CIDR'
-            vpc_data[cckey] = value
+            if value is not None:
+                vpc_data[cckey] = value
         return {
             'Network': {
                 'Name': {'Value': self._name},
