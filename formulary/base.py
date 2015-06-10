@@ -149,13 +149,11 @@ class Resource(object):
         if self._tags:
             dict_val['Properties']['Tags'] = []
             for key, value in self._tags.items():
-                dict_val['Properties']['Tags'].append(
-                    {'Key': key,
-                     'Value': value})
+                dict_val['Properties']['Tags'].append({'Key': key,
+                                                       'Value': value})
             if self._name:
-                dict_val['Properties']['Tags'].append(
-                    {'Key': 'Name',
-                     'Value': self._name})
+                dict_val['Properties']['Tags'].append({'Key': 'Name',
+                                                       'Value': self._name})
         for key, value in self._attributes.items():
             dict_val[key] = value
         return dict_val
