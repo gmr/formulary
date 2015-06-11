@@ -20,9 +20,11 @@ ACTIONS = {'create', 'update'}
 CONFIG_FILES = {'amis.yaml', 'mapping.yaml', 'instances.yaml',
                 'environments', 'rds', 'services'}
 RESOURCE_TYPES = {'environment', 'service', 'elasticache', 'rds',  'stack'}
-
-ENVIRONMENT_FOLDER = 'environments'
-SERVICE_FOLDER = 'services'
+STACK_FOLDERS = {'elasticache': 'elasticache',
+                 'environment': 'environments',
+                 'rds': 'rds',
+                 'service': 'services',
+                 'stack': 'stacks'}
 
 
 class Controller(object):
@@ -89,6 +91,11 @@ class Controller(object):
                                        self._mappings)
         self._template.update_resources(builder.resources)
 
+    def _build_rds_resources(self):
+        builder = builders.RDS(self._config, self._resource, self._environment,
+                               self._mappings, self._stack)
+        self._template.update_resources(builder.resources)
+
     def _build_service_resources(self):
         service_path = path.join(self._config_path, self._resource_folder)
         builder = builders.Service(self._config, self._resource,
@@ -104,10 +111,18 @@ class Controller(object):
 
         self._template.update_mappings(self._stack.mappings)
 
-        if self._resource_type == 'service':
+        if self._resource_type == 'rds':
+            self._build_rds_resources()
+
+        elif self._resource_type == 'service':
             self._build_service_resources()
 
     def _error(self, message):
+        """Write out an error message and exit.
+
+        :param str message: The error message
+
+        """
         sys.stderr.write('ERROR: {0}\n'.format(message))
         sys.exit(1)
 
@@ -134,49 +149,8 @@ class Controller(object):
         """
         if self._resource_type == 'environment':
             return
-        return stack.Stack(self._environment, self._environment_config)
-
-    def _load_mappings(self):
-        """Return the mapping data from the various config dirs and return
-        merged mapping values in order of precedence of global, environment,
-        or service/entity.
-
-        :rtype: dict
-
-        """
-        mappings = dict()
-        mappings.update(self._load_config_file(self._config_path, 'mappings'))
-        if not self._resource == 'environment':
-            mappings.update(self._load_environment_mappings())
-
-        mappings.update(self._load_config_file(self._resource_folder,
-                                               'mappings'))
-
-        return mappings
-
-    def _load_environment_config(self):
-        """Return the environment configuration
-
-        :rtype: dict
-
-        """
-        if not self._environment:
-            return {}
-        return self._load_config_file(path.join(ENVIRONMENT_FOLDER,
-                                                self._environment),
-                                      'environment')
-
-    def _load_environment_mappings(self):
-        """Return the mappings from the environment folder
-
-        :rtype: dict
-
-        """
-        if not self._environment:
-            return {}
-        return self._load_config_file(path.join(ENVIRONMENT_FOLDER,
-                                                self._environment),
-                                      'mappings')
+        return stack.Stack(self._environment, self._environment_config,
+                           None, self._profile)
 
     def _load_config(self):
         """Return the config for the specified resource type
@@ -184,8 +158,12 @@ class Controller(object):
         :rtype: dict
 
         """
-        config = self._load_config_file(self._resource_folder,
-                                        self._resource_type)
+        if self._resource_type in ['environment', 'service']:
+            config = self._load_config_file(self._resource_folder,
+                                            self._resource_type)
+        else:
+            config = self._load_config_file(self._resource_folder,
+                                            self._resource)
         return self._flatten_config(config)
 
     def _load_config_file(self, folder, file):
@@ -206,6 +184,48 @@ class Controller(object):
                 return yaml.load(handle)
         LOGGER.debug('Configuration file not found: %s', file_path)
         return {}
+
+    def _load_environment_config(self):
+        """Return the environment configuration
+
+        :rtype: dict
+
+        """
+        if not self._environment:
+            return {}
+        return self._load_config_file(path.join(STACK_FOLDERS['environment'],
+                                                self._environment),
+                                      'environment')
+
+    def _load_environment_mappings(self):
+        """Return the mappings from the environment folder
+
+        :rtype: dict
+
+        """
+        if not self._environment:
+            return {}
+        return self._load_config_file(path.join(STACK_FOLDERS['environment'],
+                                                self._environment),
+                                      'mappings')
+
+    def _load_mappings(self):
+        """Return the mapping data from the various config dirs and return
+        merged mapping values in order of precedence of global, environment,
+        or service/entity.
+
+        :rtype: dict
+
+        """
+        mappings = dict()
+        mappings.update(self._load_config_file(self._config_path, 'mappings'))
+        if not self._resource == 'environment':
+            mappings.update(self._load_environment_mappings())
+
+        mappings.update(self._load_config_file(self._resource_folder,
+                                               'mappings'))
+
+        return mappings
 
     @staticmethod
     def _normalize_path(value): # pragma: no cover
@@ -235,7 +255,10 @@ class Controller(object):
         :rtype: str
 
         """
-        return path.join('{}s'.format(self._resource_type), self._resource)
+        if self._resource_type in ['environment', 'service']:
+            return path.join('{}s'.format(self._resource_type),
+                             self._resource)
+        return self._resource_type
 
     @property
     def _template_name(self):
@@ -309,7 +332,7 @@ class Controller(object):
 
         """
         return path.exists(path.join(config_path,
-                                     ENVIRONMENT_FOLDER,
+                                     STACK_FOLDERS['environment'],
                                      environment,
                                      'environment.yaml'))
 
@@ -322,10 +345,14 @@ class Controller(object):
         :rtype: bool
 
         """
+        if resource_type in ['environment', 'service']:
+            return path.exists(path.join(config_path,
+                                         '{}s'.format(resource_type),
+                                         resource,
+                                         '{}.yaml'.format(resource_type)))
         return path.exists(path.join(config_path,
-                                     '{}s'.format(resource_type),
-                                     resource,
-                                     '{}.yaml'.format(resource_type)))
+                                     STACK_FOLDERS[resource_type],
+                                     '{}.yaml'.format(resource)))
 
     @staticmethod
     def _validate_resource_type(resource_type):

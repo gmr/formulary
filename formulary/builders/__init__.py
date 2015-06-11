@@ -4,4 +4,5 @@ templates.
 
 """
 from formulary.builders.environment import Environment
+from formulary.builders.rds import RDS
 from formulary.builders.service import Service
