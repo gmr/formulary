@@ -17,6 +17,7 @@ class _API(object):
 
     def __init__(self, region, profile):
         kwargs = {'profile_name': profile} if profile else {}
+        LOGGER.debug('Connecting with profile: %r', kwargs)
         self._cf = cloudformation.connect_to_region(region, **kwargs)
         self._vpc = vpc.connect_to_region(region, **kwargs)
 
