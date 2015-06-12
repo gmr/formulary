@@ -11,6 +11,7 @@ python:
 install:
   - if [[ $TRAVIS_PYTHON_VERSION == '2.6' ]]; then pip install unittest2 --download-cache $HOME/.pip-cache; fi
   - pip install --download-cache $HOME/.pip-cache -r test-requirements.txt
+  - pip install --download-cache $HOME/.pip-cache -r requirements.txt
 script: nosetests --with-coverage --cover-package=formulary --cover-branches
 after_success:
   - codecov
