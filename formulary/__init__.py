@@ -2,7 +2,7 @@
 Formulary: Cloud-Formation Stack Management
 
 """
-__version__ = '0.1.0'
+__version__ = '0.1.1'
 
 LOG_CONFIG = {
     'version': 1,
