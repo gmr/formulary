@@ -56,7 +56,7 @@ class ControllerInitializationTests(unittest.TestCase):
 
     def test_invalid_reource(self):
         path = str(uuid.uuid4())
-        resource_type = str(uuid.uuid4())
+        resource_type = 'service'
         resource = str(uuid.uuid4())
         self.assertFalse(controller.Controller._validate_resource(path,
                                                                   resource_type,
@@ -66,7 +66,7 @@ class ControllerInitializationTests(unittest.TestCase):
     def test_valid_config_dir(self, exists):
         exists.side_effect = self._path_exists_side_effects()
         path = str(uuid.uuid4())
-        resource_type = str(uuid.uuid4())
+        resource_type = 'service'
         resource = str(uuid.uuid4())
         self.assertTrue(controller.Controller._validate_resource(path,
                                                                  resource_type,
