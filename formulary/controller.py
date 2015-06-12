@@ -71,6 +71,8 @@ class Controller(object):
                                             self._profile)
             except boto.provider.ProfileNotFoundError:
                 self._error('AWS profile not found')
+            except cloudformation.RequestException as error:
+                self._error(str(error))
             print('Stack created')
 
         elif self._action == 'update':
@@ -79,6 +81,8 @@ class Controller(object):
                                             self._profile)
             except boto.provider.ProfileNotFoundError:
                 self._error('AWS profile not found')
+            except cloudformation.RequestException as error:
+                self._error(str(error))
             print('Stack updated')
 
         result = cloudformation.estimate_stack_cost(self._region,
