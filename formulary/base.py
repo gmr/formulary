@@ -15,6 +15,7 @@ class Builder(object):
         self._name = name
         self._environment = environment
         self._mappings = mappings
+        self._outputs = {}
         self._resources = {}
 
     @property
@@ -36,9 +37,35 @@ class Builder(object):
         return self._name
 
     @property
+    def outputs(self):
+        """Return the outputs dictionary for the builder
+
+        :rtype: dict
+
+        """
+        return dict(self._outputs)
+
+    @property
     def resources(self):
-        """Return the resource dictionary for the builder"""
+        """Return the resource dictionary for the builder
+
+        :rtype: dict
+
+        """
         return dict(self._resources)
+
+    def _add_output(self, name, description, value):
+        """Add an output that will be added to the template
+
+        :param str name: The name of the output
+        :param str description: The description of the output
+        :param str|dict value: The value of the output
+
+        """
+        self._outputs[name] = {
+            'Description': description,
+            'Value': value
+        }
 
     def _add_resource(self, name, resource):
         """Add a resource to the template, returning the cloud formation
@@ -53,12 +80,22 @@ class Builder(object):
         self._resources[resource_id] = resource
         return resource_id
 
-    @staticmethod
-    def _flatten_config(config, environment):
+    def _flatten_config(self, config, environment):
+        out = {}
         for key, value in config.items():
-            if value == environment:
-                config[key] = config[key][environment]
-        return config
+            if isinstance(value, dict):
+                for value_key in config[key].keys():
+                    if value_key == environment:
+                        out[key] = config[key][value_key]
+                        break
+                    elif value_key == 'default':
+                        out[key] = config[key]['default']
+                        break
+                    else:
+                        out[key] = self._flatten_config(value, environment)
+            else:
+                out[key] = value
+        return out
 
     def _maybe_replace_with_mapping(self, value):
         """If the value is a ^map macro, replace the with the value from the
