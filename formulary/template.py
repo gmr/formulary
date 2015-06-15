@@ -22,6 +22,19 @@ class Template(object):
         self._parameters = {}
         self._resources = {}
 
+    def add_output(self, name, description, reference):
+        """Add an output to the template
+
+        :param str name: The name of the output
+        :param str description: The description of the output
+        :param str reference: The object to reference
+
+        """
+        self._outputs[name] = {
+            'Description': description,
+            'Value': {'Ref': reference}
+        }
+
     def add_resource(self, resource_id, resource):
         """Add a resource to the template
 
@@ -73,6 +86,14 @@ class Template(object):
 
         """
         self._mappings.update(mappings)
+
+    def update_outputs(self, outputs):
+        """Update the outputs with values from another dict.
+
+        :param dict outputs: Additional outputs to add
+
+        """
+        self._outputs.update(outputs)
 
     def update_resources(self, resources):
         """Update the resources with the resources from another dict.
