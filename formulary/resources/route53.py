@@ -14,6 +14,9 @@ class Route53AliasTarget(base.Property):
 
 
 class Route53HostedZone(base.Resource):
+
+    tags = False
+
     def __init__(self, config, tags, name, vpcs):
         super(Route53HostedZone, self).__init__('AWS::Route53::HostedZone')
         self._properties['HostedZoneConfig'] = config
@@ -41,6 +44,9 @@ class Route53HostedZoneVPCs(base.Property):
 
 
 class Route53RecordSet(base.Resource):
+
+    tags = False
+
     def __init__(self, domain_name, hostname, resources=None,
                  alias_target=None, record_type='A', ttl=300, comment=None):
         super(Route53RecordSet, self).__init__('AWS::Route53::RecordSet')
@@ -65,6 +71,9 @@ class Route53RecordSet(base.Resource):
 
 
 class Route53RecordSetGroup(base.Resource):
+
+    tags = False
+
     def __init__(self, domain_name, record_sets, comment=None):
         super(Route53RecordSetGroup,
               self).__init__('AWS::Route53::RecordSetGroup')
