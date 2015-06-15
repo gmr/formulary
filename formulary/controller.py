@@ -93,11 +93,13 @@ class Controller(object):
     def _build_environment_resources(self):
         builder = builders.Environment(self._config, self._resource,
                                        self._mappings)
+        self._template.update_outputs(builder.outputs)
         self._template.update_resources(builder.resources)
 
     def _build_rds_resources(self):
         builder = builders.RDS(self._config, self._resource, self._environment,
                                self._mappings, self._stack)
+        self._template.update_outputs(builder.outputs)
         self._template.update_resources(builder.resources)
 
     def _build_service_resources(self):
@@ -106,6 +108,7 @@ class Controller(object):
                                    self._environment, self._mappings,
                                    self._stack, self._region, self._amis,
                                    self._instances, service_path)
+        self._template.update_outputs(builder.outputs)
         self._template.update_resources(builder.resources)
 
     def _build_template_resources(self):
