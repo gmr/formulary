@@ -133,6 +133,8 @@ class Resource(object):
     Represents a Cloud Formation resource as a class
 
     """
+    tags = True
+
     def __init__(self, resource_type):
         """Create a new resource specifying the resource type
 
@@ -182,7 +184,7 @@ class Resource(object):
         """
         self._prune_empty_properties()
         dict_val = dict({'Type': self._type, 'Properties': self._properties})
-        if self._tags:
+        if self._tags and self.tags is True:
             dict_val['Properties']['Tags'] = []
             for key, value in self._tags.items():
                 dict_val['Properties']['Tags'].append({'Key': key,
