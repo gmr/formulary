@@ -8,6 +8,13 @@ from formulary.resources.ec2 import SecurityGroupRule
 from formulary.resources.elb import ELB
 from formulary.resources.elb import ELBHeathCheck
 from formulary.resources.elb import ELBListener
+from formulary.resources.route53 import Route53AliasTarget
+from formulary.resources.route53 import Route53HostedZone
+from formulary.resources.route53 import Route53HostedZoneConfig
+from formulary.resources.route53 import Route53HostedZoneTags
+from formulary.resources.route53 import Route53HostedZoneVPCs
+from formulary.resources.route53 import Route53RecordSet
+from formulary.resources.route53 import Route53RecordSetGroup
 from formulary.resources.rds import DBInstance
 from formulary.resources.rds import DBSubnetGroup
 from formulary.resources.vpc import DHCPOptions

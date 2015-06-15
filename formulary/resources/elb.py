@@ -24,7 +24,6 @@ class ELB(base.Resource):
 
 
 class ELBHeathCheck(base.Property):
-
     def __init__(self, interval=30, target='HTTP:80', timeout=5,
                  healthy=10, unhealthy=2):
         super(ELBHeathCheck, self).__init__()
@@ -47,5 +46,3 @@ class ELBListener(base.Property):
                         'PolicyNames':  policy_names or [],
                         'Protocol': protocol,
                         'SSLCertificateId': ssl_certificate_id}
-
-
