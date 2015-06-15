@@ -52,6 +52,8 @@ class Route53RecordSet(base.Resource):
         super(Route53RecordSet, self).__init__('AWS::Route53::RecordSet')
         if alias_target and resources:
             raise ValueError('Can not have both resources and an alias target')
+        if alias_target and ttl:
+            ttl = None
         if not alias_target and not resources:
             raise ValueError('Must have either an alias target or resources')
         domain_name = domain_name.rstrip('.') + '.'
@@ -65,7 +67,7 @@ class Route53RecordSet(base.Resource):
         self._properties['Region'] = None
         self._properties['ResourceRecords'] = resources
         self._properties['SetIdentifier'] = None
-        self._properties['TTL'] = str(ttl)
+        self._properties['TTL'] = str(ttl) if ttl else None
         self._properties['Type'] = record_type
         self._properties['Weight'] = None
 

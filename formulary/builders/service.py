@@ -26,6 +26,7 @@ class Service(base.Builder):
         self._local_path = local_path
         self._mappings = mappings
         self._mappings.update(stack.mappings)
+        self._ref_ids = []
         self._region = region
         self._stack = stack
         self._security_group = self._add_security_group()
@@ -33,6 +34,7 @@ class Service(base.Builder):
         self._maybe_add_elbs()
         self._add_tag_to_resources('Environment', self._stack.environment)
         self._add_tag_to_resources('Service', self._name)
+        self._maybe_add_route53_resources(self._config)
 
     def _add_autobalanced_instances(self):
         count = self._config.get('instance-count', 1)
@@ -82,8 +84,9 @@ class Service(base.Builder):
         :rtype: str
 
         """
+        full_name = '{0}-service-{1}'.format(self._environment, name)
         kwargs = {
-            'name': '{0}-service-{1}'.format(self._environment, name),
+            'name': full_name,
             'ami': self._get_ami_id(),
             'availability_zone': subnet.availability_zone,
             'instance_type': config.get('instance-type'),
@@ -100,7 +103,19 @@ class Service(base.Builder):
         for key in ['environment', 'region', 'service']:
             del kwargs[key]
         resource = resources.EC2Instance(**kwargs)
-        return self._add_resource(name, resource)
+
+        ref_id = utils.camel_case(full_name)
+
+        self._add_output(utils.camel_case('{0}-private-ip'.format(name)),
+                         'Private IP address for {0}'.format(full_name),
+                         {'Fn::GetAtt': [ref_id, 'PrivateIp']})
+
+        self._add_output(utils.camel_case('{0}-public-ip'.format(name)),
+                         'Public IP address for {0}'.format(full_name),
+                         {'Fn::GetAtt': [ref_id, 'PublicIp']})
+
+        self._ref_ids.append(ref_id)
+        return self._add_resource(full_name, resource)
 
     def _add_instances(self):
         if 'instances' in self._config:
@@ -111,21 +126,40 @@ class Service(base.Builder):
                 for key in ['availability_zone', 'private_ip']:
                     cfg[key] = self._maybe_replace_with_mapping(cfg[key])
                 self._maybe_add_availability_zone(cfg)
-                self._add_instance('{0}-{1}'.format(self._environment, name),
+                self._add_instance(name,
                                    self._get_subnet(cfg['availability_zone']),
                                    cfg)
         elif self._config.get('instance-strategy') == 'same-az':
             self._maybe_add_availability_zone(self._config)
             subnet = self._get_subnet(self._config['availability_zone'])
             for index in range(0, self._config.get('instance-count', 1)):
-                self._add_instance('{0}-{1}{2}'.format(self._environment,
-                                                       self._name, index),
+                self._add_instance('{1}{2}'.format(self._name, index),
                                    subnet, self._config)
         elif self._config.get('instance-strategy') == 'az-balanced':
             return self._add_autobalanced_instances()
         elif 'instance-strategy' in self._config:
             raise ValueError('Unknown instance-strategy: '
                              '{0}'.format(self._config['instance-strategy']))
+
+    def _add_route53_a_records(self, config):
+        for hostname in config['hostnames'] if 'hostnames' in config \
+                else [config['hostname']]:
+            refs = [{'Fn::GetAtt': [ref_id, 'PublicIp']}
+                    for ref_id in self._ref_ids]
+            self._add_resource('route53-a-{}'.format(hostname),
+                               resources.Route53RecordSet(config['domain_name'],
+                                                          hostname, refs,
+                                                          None, 'A'))
+
+    def _add_route53_elb_alias(self, ref_id, config):
+        dns_name = {'Fn::GetAtt': [ref_id, 'DNSName']}
+        hosted_zone_id = {'Fn::GetAtt': [ref_id, 'CanonicalHostedZoneNameID']}
+        alias = resources.Route53AliasTarget(dns_name,
+                                             hosted_zone_id)
+        self._add_resource('route53-alias-{}'.format(config['hostname']),
+                           resources.Route53RecordSet(config['domain_name'],
+                                                      config['hostname'], None,
+                                                      alias.as_dict(), 'A'))
 
     def _add_security_group(self):
         builder = securitygroup.SecurityGroup(self._config,
@@ -184,7 +218,21 @@ class Service(base.Builder):
 
     def _maybe_add_elbs(self):
         for name, config in self._config.get('elb', {}).items():
-            self._add_elb('{0}-{1}'.format(self._environment, name), config)
+            full_name = '{0}-{1}'.format(self._environment, name)
+            self._add_elb(full_name, config)
+            if config.get('route53_resource'):
+                alias_ref_id = \
+                    self._add_route53_elb_alias(utils.camel_case(full_name),
+                                                config['route53_resource'])
+
+
+
+    def _maybe_add_route53_resources(self, config):
+        if not config.get('route53_resource'):
+            return
+
+        if config['route53_resource']['type'] == 'A':
+            self._add_route53_a_records(config['route53_resource'])
 
     def _render_user_data(self, content, kwargs):
         mappings = dict(self._mappings)
