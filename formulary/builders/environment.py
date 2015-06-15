@@ -22,6 +22,8 @@ class Environment(base.Builder):
         self._acl = self._add_network_acl()
         self._add_network_acl_entries()
         self._add_subnets()
+        self._add_output('VPCId', 'VPC ID for {0}'.format(self._vpc_name),
+                         self._vpc)
 
     def _add_vpc(self):
         """Add the VPC section to the template, returning the id and name
