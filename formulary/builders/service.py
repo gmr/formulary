@@ -51,8 +51,12 @@ class Service(base.Builder):
             'port': config['port'],
             'protocol': protocol,
             'instance_port': instance_port,
-            'instance_protocol': config.get('instance_protocol', protocol)
+            'instance_protocol': config.get('instance_protocol', protocol),
+            'ssl_certificate_id': config.get('ssl_certificate_id')
         }
+        for key, value in [(k, v) for k, v in kwargs.items()]:
+            if value is None:
+                del kwargs[key]
         listeners = [resources.ELBListener(**kwargs)]
 
         kwargs = {'interval': config.get('interval'),
