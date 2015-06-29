@@ -5,9 +5,15 @@ Main Formulary Controller
 import logging
 from os import path
 import sys
+import uuid
 
-import boto.provider
 import yaml
+
+from formulary.builders import config
+from formulary.builders import environment
+from formulary.builders import rds
+from formulary.builders import service
+
 
 from formulary import builders
 from formulary import cloudformation
@@ -30,15 +36,16 @@ STACK_FOLDERS = {'elasticache': 'elasticache',
 class Controller(object):
     """The controller implements the top-level application behavior"""
 
-    def __init__(self, config_path, action, environment, resource_type,
-                 resource, verbose, dry_run, profile):
+    def __init__(self, config_path, action, env, resource_type, resource,
+                 verbose, dry_run, profile):
         config_path = self._normalize_path(config_path)
         self._validate_arguments(config_path, action, environment,
                                  resource_type, resource)
 
         self._action = action
+        self._s3_prefix = str(uuid.uuid4())
         self._config_path = config_path
-        self._environment = environment
+        self._environment = env
         self._profile = profile
         self._resource = resource
         self._resource_type = resource_type
@@ -49,9 +56,22 @@ class Controller(object):
         self._instances = self._load_config_file('.', 'instances')
         self._config = self._load_config()
         self._environment_config = self._load_environment_config()
+        self._s3_bucket = self._environment_config.get('s3bucket')
+        if not self._s3_bucket:
+            self._s3_bucket = self._config.get('s3bucket')
+
+        LOGGER.debug('S3bucket: %s', self._s3_bucket)
+
+        if not self._s3_bucket:
+            raise ValueError('s3bucket not configured in environment')
+
         self._mappings = self._load_mappings()
         self._template = template.Template(self._template_name)
         self._stack = self._get_stack()
+        self._cloud_formation = cloudformation.CloudFormation(self._profile,
+                                                              self._region,
+                                                              self._s3_bucket,
+                                                              self._s3_prefix)
 
     def execute(self):
         """Create or update a Cloud Formation stack"""
@@ -61,53 +81,26 @@ class Controller(object):
             self._template.set_description(self._config['description'])
 
         template_value = self._template.as_json()
+
         if self._dry_run:
             print(template_value)
             return
 
         if self._action == 'create':
-            try:
-                cloudformation.create_stack(self._region, self._template,
-                                            self._profile)
-            except boto.provider.ProfileNotFoundError:
-                self._error('AWS profile not found')
-            except cloudformation.RequestException as error:
-                self._error(str(error))
-            print('Stack created')
+            env = self._resource if not self._environment else self._environment
+            service_name = self._resource if self._environment else None
+            stack_id = self._cloud_formation.create_stack(self._template,
+                                                          env, service_name)
+            print('Stack {0} created'.format(stack_id))
 
-        elif self._action == 'update':
-            try:
-                cloudformation.update_stack(self._region, self._template,
-                                            self._profile)
-            except boto.provider.ProfileNotFoundError:
-                self._error('AWS profile not found')
-            except cloudformation.RequestException as error:
-                self._error(str(error))
-            print('Stack updated')
-
-        result = cloudformation.estimate_stack_cost(self._region,
-                                                    self._template,
-                                                    self._profile)
-        print('Stack cost calculator URL: {0}'.format(result))
 
     def _build_environment_resources(self):
-        builder = builders.Environment(self._config, self._resource,
-                                       self._mappings)
-        self._template.update_outputs(builder.outputs)
-        self._template.update_resources(builder.resources)
 
-    def _build_rds_resources(self):
-        builder = builders.RDS(self._config, self._resource, self._environment,
-                               self._mappings, self._stack)
-        self._template.update_outputs(builder.outputs)
-        self._template.update_resources(builder.resources)
+        builder_config = config.Config(self._config, self._mappings,
+                                       self._region, self._s3_bucket,
+                                       self._s3_prefix)
 
-    def _build_service_resources(self):
-        service_path = path.join(self._config_path, self._resource_folder)
-        builder = builders.Service(self._config, self._resource,
-                                   self._environment, self._mappings,
-                                   self._stack, self._region, self._amis,
-                                   self._instances, service_path)
+        builder = environment.Environment(builder_config, self._resource)
         self._template.update_outputs(builder.outputs)
         self._template.update_resources(builder.resources)
 
@@ -118,13 +111,16 @@ class Controller(object):
 
         self._template.update_mappings(self._stack.mappings)
 
+        """
         if self._resource_type == 'rds':
             self._build_rds_resources()
 
         elif self._resource_type == 'service':
             self._build_service_resources()
+        """
 
-    def _error(self, message):
+    @staticmethod
+    def _error(message):
         """Write out an error message and exit.
 
         :param str message: The error message
@@ -133,17 +129,17 @@ class Controller(object):
         sys.stderr.write('ERROR: {0}\n'.format(message))
         sys.exit(1)
 
-    def _flatten_config(self, config):
+    def _flatten_config(self, cfg):
         """Take a given config dictionary and if it contains environment
         specific values, map the environment values to the associated
         top level keys.
 
-        :param dict config: The configuration to flatten
+        :param dict cfg: The configuration to flatten
         :rtype: dict
 
         """
         output = {}
-        for key, value in config.items():
+        for key, value in cfg.items():
             if isinstance(value, dict) and self._environment in value:
                 output[key] = value[self._environment]
             else:
