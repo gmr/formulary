@@ -2,7 +2,7 @@
 Cloud Formation Resources
 
 """
-from formulary import base
+from formulary.resources import base
 
 
 class Stack(base.Resource):
@@ -23,11 +23,9 @@ class Stack(base.Resource):
     """
     def __init__(self, template_url, notifications=None, timeout=None):
         super(Stack, self).__init__('AWS::CloudFormation::Stack')
-        self._properties = {
-            'NotificationARNs': notifications,
-            'TemplateURL': template_url,
-            'TimeoutInMinutes': timeout
-        }
+        self._properties = {'NotificationARNs': notifications,
+                            'TemplateURL': template_url,
+                            'TimeoutInMinutes': timeout}
 
 
 class WaitCondition(base.Resource):
@@ -48,11 +46,9 @@ class WaitCondition(base.Resource):
     def __init__(self, count, handle, timeout):
         super(WaitCondition,
               self).__init__('AWS::CloudFormation::WaitCondition')
-        self._properties = {
-            'Count': count,
-            'Handle': handle,
-            'Timeout': timeout
-        }
+        self._properties = {'Count': count,
+                            'Handle': handle,
+                            'Timeout': timeout}
 
 
 class WaitConditionHandle(base.Resource):

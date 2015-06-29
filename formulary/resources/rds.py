@@ -2,7 +2,7 @@
 Cloud Formation RDS Resources
 
 """
-from formulary import base
+from formulary.resources import base
 
 
 class DBInstance(base.Resource):

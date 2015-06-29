@@ -2,7 +2,7 @@
 Cloud Formation Port 53 Resources
 
 """
-from formulary import base
+from formulary.resources import base
 
 
 class Route53AliasTarget(base.Property):
