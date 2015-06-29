@@ -5,85 +5,69 @@ Cloud Formation methods and interfaces
 import collections
 import json
 import logging
+import uuid
 
-from boto import cloudformation
-from boto import exception
+from boto3 import session
+from botocore import exceptions
+
+from formulary import s3
 
 LOGGER = logging.getLogger(__name__)
+MAX_TEMPLATE_SIZE = 51200
 
 StackResource = collections.namedtuple('StackResource',
                                        ('id', 'type', 'name', 'status'))
 
 
-def create_stack(region, template, profile):
-    """Create a stack in the specified region with the given template.
+class CloudFormation(object):
+    """Class for interfacing with Cloud Formation and related APIs"""
 
-    :param str region: The region name to create the stack in
-    :param Template template: The template to use
-    :param str profile: The credentials profile to use
-    :raises: RequestException
+    def __init__(self, profile, region, s3bucket_name, s3bucket_path):
+        """Estimate the cost of the stack in EC2
 
-    """
-    kwargs = {'profile_name': profile} if profile else {}
-    connection = cloudformation.connect_to_region(region, **kwargs)
-    template_body = template.as_json()
-    if not connection.validate_template(template_body):
-        raise RequestException('The specified template did not validate')
-    try:
-        connection.create_stack(template.name, template_body)
-    except exception.BotoServerError as error:
-        raise RequestException(error)
-    connection.close()
+        :param str region: The region name to create the stack in
+        :param str bucket: The bucket to use for large templates
+        :param str profile: The credentials profile to use
 
+        """
+        self._s3 = s3.S3(s3bucket_name, s3bucket_path, profile)
 
-def estimate_stack_cost(region, template, profile):
-    """Estimate the cost of the stack in EC2
+        self._session = session.Session(profile_name=profile,
+                                        region_name=region)
+        self._client = self._session.client('cloudformation')
 
-    :param str region: The region name to create the stack in
-    :param Template template: The template to use
-    :param str profile: The credentials profile to use
-    :raises: RequestException
+    def create_stack(self, template, environment, service=None):
+        """Create a stack in the specified region with the given template,
+        returning the stack id.
 
-    """
-    kwargs = {'profile_name': profile} if profile else {}
-    connection = cloudformation.connect_to_region(region, **kwargs)
-    template_body = template.as_json()
-    if not connection.validate_template(template_body):
-        raise RequestException('The specified template did not validate')
-    try:
-        result = connection.estimate_template_cost(template_body)
-    except exception.BotoServerError as error:
-        raise RequestException(error)
-    connection.close()
-    return result
+        :param Template template: The template to use
+        :param str environment: The environment to set in a stack tag
+        :param str|None service: The service name to set in a stack tag
+        :rtype: str
 
+        """
+        template_id = str(uuid.uuid4())
+        url = self._s3.upload(template_id, template.as_json())
+        tags = [{'Key': 'Environment', 'Value': environment}]
+        if service:
+            tags.append({'Key': 'Service', 'Value': service})
 
-def update_stack(region, template, profile):
-    """Update a stack in the specified region with the given template.
+        try:
+            result = self._client.create_stack(StackName=template.name,
+                                               TemplateURL=url,
+                                               Tags=tags)
+        except exceptions.ClientError as error:
+            self._s3.delete(template_id)
+            raise RequestException(error)
 
-    :param str region: The region name to create the stack in
-    :param Template template: The template to use
-    :param str profile: The credentials profile to use
-    :raises: RequestException
-
-    """
-    kwargs = {'profile_name': profile} if profile else {}
-    connection = cloudformation.connect_to_region(region, **kwargs)
-    template_body = template.as_json()
-    if not connection.validate_template(template_body):
-        raise RequestException('The specified template did not validate')
-    try:
-        connection.update_stack(template.name, template_body)
-    except exception.BotoServerError as error:
-        raise RequestException(error)
-    connection.close()
+        LOGGER.debug('Created stack ID: %r', result['StackId'])
+        self._s3.delete(template_id)
+        return result['StackId']
 
 
 class RequestException(Exception):
     def __init__(self, error):
-        error = str(error)
-        payload = json.loads(error[error.find('{'):])
-        self._message = payload['Error']['Message']
+        self._message = error.response['Error']['Message']
 
     def __repr__(self):
         return '<{0} "{1}">'.format(self._message)
