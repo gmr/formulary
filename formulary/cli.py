@@ -8,6 +8,7 @@ from os import path
 import sys
 
 from formulary import controller
+from formulary import cloudformation
 from formulary import LOG_CONFIG
 
 DESCRIPTION = 'AWS Cloud Formation Stack Management'
@@ -32,10 +33,14 @@ class CLI(object):
                                         args.dry_run,
                                         args.profile)
         except ValueError as error:
-            sys.stderr.write('{}\n'.format(error))
+            sys.stderr.write('ERROR: {}\n'.format(error))
             sys.exit(1)
 
-        obj.execute()
+        try:
+            obj.execute()
+        except cloudformation.RequestException as error:
+            sys.stderr.write('ERROR: {}\n'.format(error))
+            sys.exit(1)
 
     @staticmethod
     def _add_commands(parser):
