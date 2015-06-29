@@ -4,15 +4,15 @@ Cloud Formation template
 
 """
 
-from formulary import base
-from formulary import resources
+from formulary.builders import base
+from formulary.resources import ec2
 from formulary import utils
 
 
 class Environment(base.Builder):
 
-    def __init__(self, config, name, mappings):
-        super(Environment, self).__init__(config, name, None, mappings)
+    def __init__(self, config, name):
+        super(Environment, self).__init__(config, name)
         self._vpc, self._vpc_name = self._add_vpc()
         self._add_dhcp()
         self._gateway = self._add_gateway()
@@ -33,11 +33,11 @@ class Environment(base.Builder):
 
         """
         vpc_name = self._name.replace('_', '-')
-        resource = resources.VPC(vpc_name,
-                                 self._config['vpc']['dns-support'],
-                                 self._config['vpc']['dns-hostnames'],
-                                 self._config['CIDR'])
-        resource.add_tag('Environment', self._config['environment'])
+        resource = ec2.VPC(vpc_name,
+                           self._config.settings['vpc']['dns-support'],
+                           self._config.settings['vpc']['dns-hostnames'],
+                           self._config.settings['CIDR'])
+        resource.add_tag('Environment', self._config.settings['environment'])
         return self._add_resource(vpc_name, resource), vpc_name
 
     def _add_dhcp(self):
@@ -50,12 +50,12 @@ class Environment(base.Builder):
         :rtype: str
 
         """
-        config = self._config['dhcp-options']
+        config = self._config.settings['dhcp-options']
         options = '{0}-dhcp'.format(self._vpc_name)
         self._add_resource(options,
-                           resources.DHCPOptions(config['domain-name'],
-                                                 config['name-servers'],
-                                                 config['ntp-servers']))
+                           ec2.DHCPOptions(config['domain-name'],
+                                           config['name-servers'],
+                                           config['ntp-servers']))
         return options
 
     def _add_dhcp_association(self, dhcp_id):
@@ -65,10 +65,10 @@ class Environment(base.Builder):
         :param str dhcp_id: The DHCP Options ID
 
         """
+        dhcp = {'Ref': utils.camel_case(dhcp_id)}
+        vpc_id = {'Ref': utils.camel_case(self._vpc_name)}
         self._add_resource('{0}-dhcp-assoc'.format(dhcp_id),
-                           resources.DHCPOptionsAssociation(
-                               utils.camel_case(dhcp_id),
-                               utils.camel_case(self._vpc_name)))
+                           ec2.VPCDHCPOptionsAssociation(dhcp, vpc_id))
 
     def _add_gateway(self):
         """Add a gateway to the template for the specified VPC
@@ -77,7 +77,7 @@ class Environment(base.Builder):
 
         """
         gateway = '{0}-gateway'.format(self._vpc_name)
-        self._add_resource(gateway, resources.Gateway())
+        self._add_resource(gateway, ec2.InternetGateway())
         return gateway
 
     def _add_gateway_attachment(self):
@@ -87,10 +87,10 @@ class Environment(base.Builder):
 
         """
         attachment = '{0}-attachment'.format(self._gateway)
+        gateway_id = {'Ref': utils.camel_case(self._gateway)}
+        vpc_id = {'Ref': utils.camel_case(self._vpc_name)}
         self._add_resource(attachment,
-                           resources.GatewayAttachment(
-                               utils.camel_case(self._vpc_name),
-                               utils.camel_case(self._gateway)))
+                           ec2.VPCGatewayAttachment(gateway_id, vpc_id))
         return attachment
 
     def _add_network_acl(self):
@@ -99,34 +99,37 @@ class Environment(base.Builder):
         :rtype: str
 
         """
-        resource = resources.NetworkACL(self._vpc_name, self._vpc)
-        resource.add_tag('Environment', self._config['environment'])
+        resource = ec2.NetworkACL(self._vpc_name,
+                                  {'Ref': utils.camel_case(self._vpc_name)})
+        resource.add_tag('Environment', self._config.settings['environment'])
         acl = '{0}-network-acl'.format(self._vpc_name)
         self._add_resource(acl, resource)
         return acl
 
     def _add_network_acl_entries(self):
         """Iterate through the ACL entries and add them"""
-        for index, acl in enumerate(self._config['network-acls']):
+        acl_id = {'Ref': utils.camel_case(self._acl)}
+        for index, acl in enumerate(self._config.settings['network-acls']):
             self._add_resource('{0}{1}'.format(self._acl, index),
-                               resources.NetworkACLEntry(
-                                   utils.camel_case(self._acl),
-                                   acl['CIDR'], acl['number'], acl['action'],
-                                   acl['egress'], acl['ports']))
+                               ec2.NetworkACLEntry(acl_id,
+                                                   acl['CIDR'],
+                                                   acl['number'], acl['action'],
+                                                   acl['egress'], acl['ports']))
 
     def _add_public_route(self):
         """Add the public route specified in the mapping ``pubic/cidr`` for
         the specified VPC, route table, gateway and internet gateway.
 
         """
+        route_table_id = {'Ref': utils.camel_case(self._route_table)}
+        gateway_id = {'Ref': utils.camel_case(self._gateway)}
+        internet_gateway_id = utils.camel_case(self._internet_gateway)
         self._add_resource('{0}-route'.format(self._vpc_name),
-                           resources.Route(
-                               utils.camel_case(self._route_table),
-                               {'Fn::FindInMap': ['SubnetConfig',
-                                                  'Public',
-                                                  'CIDR']},
-                               utils.camel_case(self._gateway),
-                               utils.camel_case(self._internet_gateway)))
+                           ec2.Route(route_table_id,
+                                     {'Fn::FindInMap': ['SubnetConfig',
+                                                        'Public',
+                                                        'CIDR']},
+                                     gateway_id, internet_gateway_id))
 
     def _add_route_table(self,):
         """Add the the route table for the specified VPC
@@ -135,24 +138,33 @@ class Environment(base.Builder):
 
         """
         route_table = '{0}-route-table'.format(self._vpc_name)
-        self._add_resource(route_table,
-                           resources.RouteTable(
-                               utils.camel_case(self._vpc_name)))
+        vpc_name = {'Ref': utils.camel_case(self._vpc_name)}
+        self._add_resource(route_table, ec2.RouteTable(vpc_name))
         return route_table
 
     def _add_subnets(self):
         """Add the network subnets for the specified VPC and route table"""
         subnet_ids = []
-        for subnet in self._config['subnets']:
-            config = self._config['subnets'][subnet]
+        route_table_id = {'Ref': utils.camel_case(self._route_table)}
+        vpc_id = {'Ref': utils.camel_case(self._vpc_name)}
+
+        for subnet in self._config.settings['subnets']:
+            config = self._config.settings['subnets'][subnet]
+
             subnet_id = '{0}{1}-subnet'.format(self._vpc_name, subnet)
+
             subnet_ids.append(utils.camel_case(subnet_id))
-            resource = resources.Subnet(self._vpc_name, subnet, self._vpc,
-                                        config['availability_zone'],
-                                        config['CIDR'])
-            resource.add_tag('Environment', self._config['environment'])
+            resource = ec2.Subnet(self._vpc_name, subnet,
+                                  vpc_id,
+                                  config['availability_zone'],
+                                  config['CIDR'])
+
+            resource.add_tag('Environment',
+                             self._config.settings['environment'])
+
             self._add_resource(subnet_id, resource)
+            subnet_ref = {'Ref': utils.camel_case(subnet_id)}
+
             self._add_resource('{0}-assoc'.format(subnet_id),
-                               resources.SubnetRouteTableAssociation(
-                                   utils.camel_case(subnet_id),
-                                   utils.camel_case((self._route_table))))
+                               ec2.SubnetRouteTableAssociation(subnet_ref,
+                                                               route_table_id))
