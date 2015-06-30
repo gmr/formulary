@@ -95,6 +95,14 @@ class Template(object):
         """
         self._outputs.update(outputs)
 
+    def update_parameters(self, parameters):
+        """Update the parameters with values from another dict.
+
+        :param dict parameters: Dict of parameters to merge in
+
+        """
+        self._parameters.update(parameters)
+
     def update_resources(self, resources):
         """Update the resources with the resources from another dict.
 
