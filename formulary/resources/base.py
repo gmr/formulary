@@ -35,6 +35,7 @@ class Resource(object):
 
         """
         self._attributes = {}
+        self._dependency = None
         self._name = None
         self._properties = {}
         self._tags = {}
@@ -87,7 +88,17 @@ class Resource(object):
                                                        'Value': self._name})
         for key, value in self._attributes.items():
             dict_val[key] = value
+        if self._dependency:
+            dict_val['DependsOn'] = self._dependency
         return dict_val
+
+    def set_dependency(self, dependency):
+        """Set a dependency for the resource to be created
+
+        :param str dependency: The dependency name or reference
+
+        """
+        self._dependency = dependency
 
     def set_name(self, name):
         """Set the resource name for use as a tag
