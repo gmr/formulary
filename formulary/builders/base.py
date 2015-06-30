@@ -80,7 +80,7 @@ class Builder(object):
         """
         return dict(self._resources)
 
-    def upload(self):
+    def upload(self, owner):
         """Upload a template for this builder to S3, returning the ID and
         the URL to the template
 
@@ -88,6 +88,8 @@ class Builder(object):
 
         """
         stack = template.Template(utils.camel_case(self.name))
+        stack.set_description('Formulary created {0} owned '
+                              '{1} nested stack'.format(owner, self.name))
         stack.update_mappings(self._config.mappings)
         stack.update_outputs(self.outputs)
         stack.update_parameters(self._parameters)
