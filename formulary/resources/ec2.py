@@ -62,7 +62,7 @@ class Instance(base.Resource):
     """The AWS::EC2::Instance type creates an Amazon EC2 instance."""
     def __init__(self, name, ami, availability_zone, block_devices,
                  instance_type, subnet, security_group, user_data,
-                 private_ip=None):
+                 private_ip=None, dependency=None):
         super(Instance, self).__init__('AWS::EC2::Instance')
         self._name = name
         self._subnet = subnet
@@ -76,7 +76,7 @@ class Instance(base.Resource):
             nic['PrivateIpAddress'] = private_ip
         self._properties = {
             'AvailabilityZone': availability_zone,
-            'BlockDeviceMappings': [block_devices],
+            'BlockDeviceMappings': block_devices,
             'DisableApiTermination': False,
             'EbsOptimized': False,
             'ImageId': ami,
@@ -86,6 +86,8 @@ class Instance(base.Resource):
             'Monitoring': False,
             'NetworkInterfaces': [nic],
             'UserData': user_data}
+        if dependency:
+            self.set_dependency(dependency)
 
     @property
     def subnet(self):
@@ -144,6 +146,7 @@ class RouteTable(base.Resource):
 
 class SecurityGroup(base.Resource):
     """Creates an Amazon EC2 security group"""
+
     def __init__(self, name, description, vpc, ingress):
         super(SecurityGroup, self).__init__('AWS::EC2::SecurityGroup')
         self._name = name
