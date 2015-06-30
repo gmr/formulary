@@ -26,7 +26,7 @@ DEFAULT_BLOCK_DEVICES = {'/dev/xvda': DEFAULT_BLOCK_DEVICE}
 class Service(base.Builder):
 
     def __init__(self, config, name, amis, local_path, environment_stack,
-                 dependency=None):
+                 dependency=None, wait_handle=None):
         super(Service, self).__init__(config, name)
 
         self._amis = amis
@@ -35,6 +35,7 @@ class Service(base.Builder):
         self._mappings = config.mappings
         self._mappings.update(environment_stack.mappings)
         self._dependency = dependency
+        self._wait_handle = wait_handle
         self._environment_stack = environment_stack
         self._security_group = self._add_security_group()
         self._add_instances()
@@ -88,6 +89,12 @@ class Service(base.Builder):
                                    {'Type': 'String',
                                     'Description': 'Resource dependency'})
             parameters[dependency] = {'Ref': dependency}
+
+        if self._wait_handle:
+            instance.add_parameter(self._wait_handle,
+                                   {'Type': 'String',
+                                    'Description': 'Resource wait handle'})
+            parameters[self._wait_handle] = {'Ref': self._wait_handle}
 
         template_id, url = instance.upload(self.name)
         self._add_stack(name, url, parameters)
