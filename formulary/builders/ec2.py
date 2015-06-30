@@ -20,7 +20,8 @@ USER_DATA_JSON = re.compile(r'(\{\"(?:Ref|Fn\::\w+)\"[\s\:]+'
 class Instance(base.Builder):
 
     def __init__(self, config, name, ami, block_devices, instance_type,
-                 private_ip, security_group, subnet, user_data, tags):
+                 private_ip, security_group, subnet, user_data, tags,
+                 dependency):
         """Create a new EC2 instance builder
 
         :param formulary.builders.config.Config: builder configuration
@@ -44,6 +45,7 @@ class Instance(base.Builder):
                   'ami': ami,
                   'availability_zone': subnet.availability_zone,
                   'block_devices': block_devices,
+                  'dependency': dependency,
                   'environment': config.environment,
                   'instance_type': instance_type,
                   'private_ip': private_ip,
