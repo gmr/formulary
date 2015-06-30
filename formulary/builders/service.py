@@ -64,6 +64,7 @@ class Service(base.Builder):
         """
         LOGGER.debug('Adding instance %s', name)
         block_devices = self._get_block_devices(config.get('block_devices'))
+        dependency = config.get('dependency') or self._dependency
         instance = ec2.Instance(self._config, name,
                                 self._get_ami_id(),
                                 block_devices,
@@ -73,21 +74,26 @@ class Service(base.Builder):
                                 subnet,
                                 self._read_user_data(),
                                 self._tags,
-                                config.get('dependency') or self._dependency)
+                                dependency)
 
         instance.add_parameter('SecurityGroupId',
                                {'Type': 'String',
                                 'Description': 'Security Group Physical ID'})
-
-        template_id, url = instance.upload()
-        self._add_stack(name, url,
-                        {'SecurityGroupId':
+        parameters = {'SecurityGroupId':
                              {'Fn::GetAtt': [self._security_group,
-                                             'Outputs.SecurityGroupId']}})
+                                             'Outputs.SecurityGroupId']}}
+
+        if dependency:
+            instance.add_parameter(dependency,
+                                   {'Type': 'String',
+                                    'Description': 'Resource dependency'})
+            parameters[dependency] = {'Ref': dependency}
+
+        template_id, url = instance.upload(self.name)
+        self._add_stack(name, url, parameters)
 
     def _add_instances(self):
         settings = self._config.settings
-        LOGGER.debug('Settings: %r', settings)
         if 'instances' in settings:
             LOGGER.debug('Adding instances')
             for name, instance_cfg in settings['instances'].items():
@@ -116,7 +122,7 @@ class Service(base.Builder):
         builder = securitygroup.SecurityGroup(self._config,
                                               self._name,
                                               self._environment_stack)
-        template_id, url = builder.upload()
+        template_id, url = builder.upload(self.name)
         security_group_stack = '{0}-security-group-stack'.format(self._name)
         stack_name = utils.camel_case(security_group_stack)
         self._add_stack(security_group_stack, url)
