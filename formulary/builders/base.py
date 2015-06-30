@@ -4,6 +4,7 @@ Base Builder Class
 """
 import uuid
 
+from formulary import s3
 from formulary import template
 from formulary import utils
 
@@ -20,7 +21,18 @@ class Builder(object):
         self._config = config
         self._name = name
         self._outputs = {}
+        self._parameters = {}
         self._resources = {}
+        self._templates = []
+
+    def add_parameter(self, name, value):
+        """Add an parameter that will be added to the template
+
+        :param str name: The name of the parameter
+        :param str|dict value: The value of the parameter
+
+        """
+        self._add_parameter(name, value)
 
     @property
     def environment(self):
@@ -77,11 +89,14 @@ class Builder(object):
         stack = template.Template(utils.camel_case(self.name))
         stack.update_mappings(self._config.mappings)
         stack.update_outputs(self.outputs)
+        stack.update_parameters(self._parameters)
         stack.update_resources(self.resources)
         value = stack.as_json()
         template_id = str(uuid.uuid4())
 
-        s3client = s3.S3(self._config.s3_bucket, self._config.s3_prefix)
+        s3client = s3.S3(self._config.s3_bucket,
+                         self._config.s3_prefix,
+                         self._config.profile)
         return template_id, s3client.upload(template_id, value)
 
     def _add_output(self, name, description, value):
@@ -93,6 +108,15 @@ class Builder(object):
 
         """
         self._outputs[name] = {'Description': description, 'Value': value}
+
+    def _add_parameter(self, name, value):
+        """Add an parameter that will be added to the template
+
+        :param str name: The name of the parameter
+        :param str|dict value: The value of the parameter
+
+        """
+        self._parameters[name] = value
 
     def _add_resource(self, name, resource):
         """Add a resource to the template, returning the cloud formation
@@ -123,3 +147,8 @@ class Builder(object):
                 raise ValueError('Invalid map reference: {}'.format(value[5:]))
             return self._config.mappings[ref[0]][ref[1]][ref[2]]
         return value
+
+    @property
+    def _tags(self):
+        return {'Environment': self._config.environment,
+                'Service': self._config.service}
