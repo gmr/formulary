@@ -39,6 +39,17 @@ class S3(object):
         obj.delete()
         LOGGER.debug('Deleted %s', file_name)
 
+    def fetch(self, file_name):
+        """Retrieve a file from S3 by name
+
+        :param str file_name: The file to fetch
+        :return: bytes
+
+        """
+        obj = self._resource.Object(self._bucket_name, self._key(file_name))
+        response = obj.get()
+        return response['Body']
+
     def upload(self, file_name, content):
         """Upload a file to S3, returning a pre-signed URL for accessing
         the file.
