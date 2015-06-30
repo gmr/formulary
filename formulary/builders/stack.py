@@ -52,8 +52,8 @@ class Stack(base.Builder):
                                           self._amis, cfg_obj.resource_folder,
                                           self._environment_stack,
                                           dependency)
-                template_id, resource_url = builder.upload()
-                self._add_stack(resource['name'], resource_url)
+                self._outputs.update(builder.outputs)
+                self._resources.update(builder.resources)
 
             elif resource['type'] == 'rds':
                 LOGGER.debug('Add RDS: %r', resource['name'])
@@ -70,8 +70,6 @@ class Stack(base.Builder):
                 LOGGER.debug('Add wait handle: %s', resource['name'])
                 self._add_resource(resource['name'],
                                    cloudformation.WaitConditionHandle())
-                name = utils.camel_case(resource['name'])
-                self._add_output(name, 'Wait Condition Handle', {'Ref': name})
 
             else:
                 ValueError('Unsupported resource type: %s', resource['type'])
