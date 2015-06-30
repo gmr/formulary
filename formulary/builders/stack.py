@@ -46,12 +46,16 @@ class Stack(base.Builder):
                                                 self._config.environment)
                 builder_cfg = self._get_builder_config(resource['name'],
                                                        cfg_obj.load())
-                dependency = utils.camel_case(resource['dependency']) \
-                    if resource.get('dependency') else None
+
+                dependency = self._maybe_camel_case(resource.get('dependency'))
+                handle = self._maybe_camel_case(resource.get('wait-handle'))
+                
                 builder = service.Service(builder_cfg, resource['name'],
                                           self._amis, cfg_obj.resource_folder,
                                           self._environment_stack,
-                                          dependency)
+                                          dependency,
+                                          handle)
+
                 self._outputs.update(builder.outputs)
                 self._resources.update(builder.resources)
 
@@ -60,11 +64,11 @@ class Stack(base.Builder):
 
             elif resource['type'] == 'wait':
                 LOGGER.debug('Add wait-condition: %r', resource['name'])
-                handle = {'Ref': utils.camel_case(resource['name'])}
+                handle = {'Ref': utils.camel_case(resource['wait-handle'])}
                 obj = cloudformation.WaitCondition(resource.get('count'),
                                                    handle,
                                                    resource.get('timeout'))
-                self._add_resource('{0}-wait'.format(resource['name']), obj)
+                self._add_resource(resource['name'], obj)
 
             elif resource['type'] == 'wait-handle':
                 LOGGER.debug('Add wait handle: %s', resource['name'])
@@ -73,3 +77,7 @@ class Stack(base.Builder):
 
             else:
                 ValueError('Unsupported resource type: %s', resource['type'])
+
+    @staticmethod
+    def _maybe_camel_case(value):
+        return utils.camel_case(value) if value else None
