@@ -14,8 +14,6 @@ from formulary.builders import environment
 from formulary.builders import rds
 from formulary.builders import service
 
-
-from formulary import builders
 from formulary import cloudformation
 from formulary import stack
 from formulary import template
@@ -39,7 +37,7 @@ class Controller(object):
     def __init__(self, config_path, action, env, resource_type, resource,
                  verbose, dry_run, profile):
         config_path = self._normalize_path(config_path)
-        self._validate_arguments(config_path, action, environment,
+        self._validate_arguments(config_path, action, env,
                                  resource_type, resource)
 
         self._action = action
@@ -75,7 +73,7 @@ class Controller(object):
 
     def execute(self):
         """Create or update a Cloud Formation stack"""
-        self._build_template_resources()
+        builder = self._build_template_resources()
 
         if self._config.get('description'):
             self._template.set_description(self._config['description'])
@@ -86,23 +84,53 @@ class Controller(object):
             print(template_value)
             return
 
-        if self._action == 'create':
-            env = self._resource if not self._environment else self._environment
-            service_name = self._resource if self._environment else None
-            stack_id = self._cloud_formation.create_stack(self._template,
-                                                          env, service_name)
-            print('Stack {0} created'.format(stack_id))
+        env = self._resource if not self._environment else self._environment
+        service_name = self._resource if self._environment else None
 
+        if self._action == 'create':
+            try:
+                stack_id = self._cloud_formation.create_stack(self._template,
+                                                              env,
+                                                              service_name)
+                print('Stack {0} created'.format(stack_id))
+            except cloudformation.RequestException as error:
+                self._error(str(error))
+
+        elif self._action == 'update':
+            try:
+                self._cloud_formation.update_stack(self._template, env,
+                                                   service_name)
+                print('Stack updated')
+            except cloudformation.RequestException as error:
+                self._error(str(error))
 
     def _build_environment_resources(self):
-
         builder_config = config.Config(self._config, self._mappings,
                                        self._region, self._s3_bucket,
-                                       self._s3_prefix)
-
+                                       self._s3_prefix, self._profile)
         builder = environment.Environment(builder_config, self._resource)
         self._template.update_outputs(builder.outputs)
         self._template.update_resources(builder.resources)
+
+    def _build_rds_resources(self):
+        builder_config = config.Config(self._config, self._mappings,
+                                       self._region, self._s3_bucket,
+                                       self._s3_prefix, self._profile)
+        builder = rds.RDS(builder_config, self._resource, self._stack)
+        self._template.update_outputs(builder.outputs)
+        self._template.update_resources(builder.resources)
+
+    def _build_service_resources(self):
+        builder_config = config.Config(self._config, self._mappings,
+                                       self._region, self._s3_bucket,
+                                       self._s3_prefix, self._profile,
+                                       self._environment, self._resource)
+        service_path = path.join(self._config_path, self._resource_folder)
+        builder = service.Service(builder_config, self._resource, self._amis,
+                                  service_path, self._stack)
+        self._template.update_outputs(builder.outputs)
+        self._template.update_resources(builder.resources)
+        return builder
 
     def _build_template_resources(self):
         self._template.update_mappings(self._mappings)
@@ -111,13 +139,10 @@ class Controller(object):
 
         self._template.update_mappings(self._stack.mappings)
 
-        """
         if self._resource_type == 'rds':
-            self._build_rds_resources()
-
+            return self._build_rds_resources()
         elif self._resource_type == 'service':
-            self._build_service_resources()
-        """
+            return self._build_service_resources()
 
     @staticmethod
     def _error(message):
@@ -162,12 +187,12 @@ class Controller(object):
 
         """
         if self._resource_type in ['environment', 'service']:
-            config = self._load_config_file(self._resource_folder,
-                                            self._resource_type)
+            settings = self._load_config_file(self._resource_folder,
+                                              self._resource_type)
         else:
-            config = self._load_config_file(self._resource_folder,
-                                            self._resource)
-        return self._flatten_config(config)
+            settings = self._load_config_file(self._resource_folder,
+                                              self._resource)
+        return self._flatten_config(settings)
 
     def _load_config_file(self, folder, file):
         """Return the contents of the specified configuration file in the
@@ -276,7 +301,7 @@ class Controller(object):
         return self._resource
 
     @classmethod
-    def _validate_arguments(cls, config_path, action, environment,
+    def _validate_arguments(cls, config_path, action, env,
                             resource_type, resource):
         """Validate the initialization arguments, raising ``ValueError`` if any
         do not validate.
@@ -285,20 +310,22 @@ class Controller(object):
 
         """
         if not cls._validate_action(action):
-            raise ValueError('Invalid action: {}'.format(action))
+            raise ValueError('Invalid action: {0}'.format(action))
 
         if not cls._validate_resource_type(resource_type):
-            raise ValueError('Invalid resource type: {}'.format(resource_type))
+            raise ValueError('Invalid resource type: {0}'.format(resource_type))
 
         if not cls._validate_config_path(config_path):
-            raise ValueError('Invalid config path: {}'.format(config_path))
+            raise ValueError('Invalid config path: {0}'.format(config_path))
 
-        if (resource_type != 'environment' and
-                not cls._validate_environment(config_path, environment)):
-            raise ValueError('Invalid environment: {}'.format(environment))
+        if resource_type != 'environment':
+            if not env:
+                raise ValueError('Environment not specified')
+            elif not cls._validate_environment(config_path, env):
+                raise ValueError('Invalid environment: {0}'.format(env))
 
         if not cls._validate_resource(config_path, resource_type, resource):
-            raise ValueError('Invalid resource: {}'.format(resource))
+            raise ValueError('Invalid resource: {0}'.format(resource))
 
     @staticmethod
     def _validate_action(action):
@@ -325,19 +352,20 @@ class Controller(object):
         return any(paths_found)
 
     @staticmethod
-    def _validate_environment(config_path, environment):
+    def _validate_environment(config_path, env):
         """Validate that the expected environment ``network.yaml``
         configuration file exists within the config path for the environment.
 
         :param str config_path: The base config path
-        :param str environment: The environment name
+        :param str env: The environment name
         :rtype: bool
 
         """
+        if not env:
+            return False
         return path.exists(path.join(config_path,
                                      STACK_FOLDERS['environment'],
-                                     environment,
-                                     'environment.yaml'))
+                                     env, 'environment.yaml'))
 
     @staticmethod
     def _validate_resource(config_path, resource_type, resource):
