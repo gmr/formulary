@@ -1,6 +1,7 @@
 """
 
 """
+import logging
 import math
 from os import path
 import random
@@ -15,6 +16,8 @@ from formulary.builders import elb
 from formulary.builders import securitygroup
 from formulary import utils
 
+LOGGER = logging.getLogger(__name__)
+
 # Defaults
 DEFAULT_BLOCK_DEVICE = {'ebs': True, 'capacity': 20, 'type': 'gp2'}
 DEFAULT_BLOCK_DEVICES = {'/dev/xvda': DEFAULT_BLOCK_DEVICE}
@@ -22,7 +25,8 @@ DEFAULT_BLOCK_DEVICES = {'/dev/xvda': DEFAULT_BLOCK_DEVICE}
 
 class Service(base.Builder):
 
-    def __init__(self, config, name, amis, local_path, environment_stack):
+    def __init__(self, config, name, amis, local_path, environment_stack,
+                 dependency=None):
         super(Service, self).__init__(config, name)
 
         self._amis = amis
@@ -30,7 +34,7 @@ class Service(base.Builder):
         self._local_path = local_path
         self._mappings = config.mappings
         self._mappings.update(environment_stack.mappings)
-        self._ref_ids = []
+        self._dependency = dependency
         self._environment_stack = environment_stack
         self._security_group = self._add_security_group()
         self._add_instances()
@@ -58,6 +62,7 @@ class Service(base.Builder):
         :rtype: str
 
         """
+        LOGGER.debug('Adding instance %s', name)
         block_devices = self._get_block_devices(config.get('block_devices'))
         instance = ec2.Instance(self._config, name,
                                 self._get_ami_id(),
@@ -67,7 +72,8 @@ class Service(base.Builder):
                                 {'Ref': 'SecurityGroupId'},
                                 subnet,
                                 self._read_user_data(),
-                                self._tags)
+                                self._tags,
+                                config.get('dependency') or self._dependency)
 
         instance.add_parameter('SecurityGroupId',
                                {'Type': 'String',
@@ -81,7 +87,9 @@ class Service(base.Builder):
 
     def _add_instances(self):
         settings = self._config.settings
+        LOGGER.debug('Settings: %r', settings)
         if 'instances' in settings:
+            LOGGER.debug('Adding instances')
             for name, instance_cfg in settings['instances'].items():
                 cfg = dict(settings)
                 del cfg['instances']
@@ -113,21 +121,6 @@ class Service(base.Builder):
         stack_name = utils.camel_case(security_group_stack)
         self._add_stack(security_group_stack, url)
         return stack_name
-
-    def _add_stack(self, name, template_url, parameters=None,
-                   timeout=None, notifications=None):
-        """Add a stack
-
-        :param str template_url: URL to the stack to add
-        :param dict parameters: Parameters to pass into the stack
-        :param int timeout: Time out duration in minutes
-        :param list notifications: A list of notification ARNs for the stack
-
-        """
-        self._add_resource(name, cloudformation.Stack(template_url,
-                                                      parameters,
-                                                      notifications,
-                                                      timeout))
 
     def _add_tag_to_resources(self, tag, value):
         for name, resource in self._resources.items():
