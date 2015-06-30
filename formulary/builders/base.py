@@ -7,6 +7,7 @@ import uuid
 from formulary import s3
 from formulary import template
 from formulary import utils
+from formulary.resources import cloudformation
 
 
 class Builder(object):
@@ -130,6 +131,21 @@ class Builder(object):
         resource_id = utils.camel_case(name)
         self._resources[resource_id] = resource
         return resource_id
+
+    def _add_stack(self, name, template_url, parameters=None,
+                   timeout=None, notifications=None):
+        """Add a stack
+
+        :param str template_url: URL to the stack to add
+        :param dict parameters: Parameters to pass into the stack
+        :param int timeout: Time out duration in minutes
+        :param list notifications: A list of notification ARNs for the stack
+
+        """
+        self._add_resource(name, cloudformation.Stack(template_url,
+                                                      parameters,
+                                                      notifications,
+                                                      timeout))
 
     def _maybe_replace_with_mapping(self, value):
         """If the value is a ^map macro, replace the with the value from the
