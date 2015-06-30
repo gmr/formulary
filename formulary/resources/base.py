@@ -90,6 +90,8 @@ class Resource(object):
             dict_val[key] = value
         if self._dependency:
             dict_val['DependsOn'] = self._dependency
+        if not dict_val['Properties']:
+            del dict_val['Properties']
         return dict_val
 
     def set_dependency(self, dependency):
