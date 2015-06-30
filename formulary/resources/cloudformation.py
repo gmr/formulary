@@ -21,9 +21,13 @@ class Stack(base.Resource):
     stacks.
 
     """
-    def __init__(self, template_url, notifications=None, timeout=None):
+    tags = False
+
+    def __init__(self, template_url, parameters=None, notifications=None,
+                 timeout=None):
         super(Stack, self).__init__('AWS::CloudFormation::Stack')
         self._properties = {'NotificationARNs': notifications,
+                            'Parameters': parameters,
                             'TemplateURL': template_url,
                             'TimeoutInMinutes': timeout}
 
