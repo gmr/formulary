@@ -99,7 +99,6 @@ class ResourceConfig(object):
         else:
             settings = self.load_file(self.resource_folder,
                                               self._resource)
-        LOGGER.debug('Loaded config: %r', settings)
         return self._flatten_config(settings)
 
     def load_file(self, folder, file):
