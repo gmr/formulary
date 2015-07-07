@@ -26,7 +26,7 @@ DEFAULT_BLOCK_DEVICES = {'/dev/xvda': DEFAULT_BLOCK_DEVICE}
 class Service(base.Builder):
 
     def __init__(self, config, name, amis, local_path, environment_stack,
-                 dependency=None, wait_handle=None):
+                 dependency=None, wait_handle=None, parent=None):
         super(Service, self).__init__(config, name)
 
         self._amis = amis
@@ -37,6 +37,7 @@ class Service(base.Builder):
         self._dependency = dependency
         self._wait_handle = wait_handle
         self._environment_stack = environment_stack
+        self._parent = parent
         self._security_group = self._add_security_group()
         self._add_instances()
 
@@ -45,13 +46,13 @@ class Service(base.Builder):
         self._add_tag_to_resources('Environment', self._config.environment)
         self._add_tag_to_resources('Service', self._name)
 
-    def _add_autobalanced_instances(self):
-        count = self._config.get('instance-count', 1)
+    def _add_autobalanced_instances(self, settings):
+        count = settings.get('instance-count', 1)
         subnets = self._get_subnets(count)
         for index in range(0, count):
             subnet = subnets.pop(0)
             self._add_instance('{0}{1}'.format(self._name, index),
-                               subnet, self._config)
+                               subnet, settings)
 
     def _add_instance(self, name, subnet, config):
         """Add an instance to the resources for the given name, subnet, and
@@ -65,7 +66,6 @@ class Service(base.Builder):
         """
         LOGGER.debug('Adding instance %s', name)
         block_devices = self._get_block_devices(config.get('block_devices'))
-        dependency = config.get('dependency') or self._dependency
         instance = ec2.Instance(self._config, name,
                                 self._get_ami_id(),
                                 block_devices,
@@ -75,7 +75,9 @@ class Service(base.Builder):
                                 subnet,
                                 self._read_user_data(),
                                 self._tags,
-                                dependency)
+                                None,
+                                config.get('ebs', True),
+                                self._parent or self._environment_stack.name)
 
         instance.add_parameter('SecurityGroupId',
                                {'Type': 'String',
@@ -84,11 +86,13 @@ class Service(base.Builder):
                              {'Fn::GetAtt': [self._security_group,
                                              'Outputs.SecurityGroupId']}}
 
+        """
         if dependency:
             instance.add_parameter(dependency,
                                    {'Type': 'String',
                                     'Description': 'Resource dependency'})
             parameters[dependency] = {'Ref': dependency}
+        """
 
         if self._wait_handle:
             instance.add_parameter(self._wait_handle,
@@ -96,8 +100,10 @@ class Service(base.Builder):
                                     'Description': 'Resource wait handle'})
             parameters[self._wait_handle] = {'Ref': self._wait_handle}
 
-        template_id, url = instance.upload(self.name)
-        self._add_stack(name, url, parameters)
+        template_id, url = instance.upload(self._name)
+
+        dependency = config.get('dependency') or self._dependency
+        self._add_stack(name, url, parameters, dependency=dependency)
 
     def _add_instances(self):
         settings = self._config.settings
@@ -120,7 +126,7 @@ class Service(base.Builder):
                 self._add_instance('{1}{2}'.format(self._name, index),
                                    subnet, settings)
         elif settings.get('instance-strategy') == 'az-balanced':
-            return self._add_autobalanced_instances()
+            return self._add_autobalanced_instances(settings)
         elif 'instance-strategy' in settings:
             raise ValueError('Unknown instance-strategy: '
                              '{0}'.format(settings['instance-strategy']))
@@ -136,7 +142,7 @@ class Service(base.Builder):
         return stack_name
 
     def _add_tag_to_resources(self, tag, value):
-        for name, resource in self._resources.items():
+        for (k, resource) in self._resources:
             resource.add_tag(tag, value)
 
     def _add_wait_condition(self, name):
@@ -150,10 +156,12 @@ class Service(base.Builder):
 
     @staticmethod
     def _get_block_devices(devices):
+        if devices == 'instance-store':
+            return
         if not devices:
             devices = DEFAULT_BLOCK_DEVICES
         values = []
-        for device, config in devices.items():
+        for index, (device, config) in enumerate(devices.items()):
             kwargs = {'name': device}
             if config.get('ebs', DEFAULT_BLOCK_DEVICE['ebs']):
                 kwargs['ebs'] = {
@@ -161,7 +169,11 @@ class Service(base.Builder):
                                              DEFAULT_BLOCK_DEVICE['type']),
                     'VolumeSize': config.get('capacity',
                                              DEFAULT_BLOCK_DEVICE['capacity'])}
-                values.append(ec2_resources.BlockDevice(**kwargs).as_dict())
+            else:
+                kwargs['virtual_name'] = 'ephemeral{0}'.format(index)
+            values.append(ec2_resources.BlockDevice(**kwargs).as_dict())
+
+        LOGGER.debug('Block devices: %r', values)
         return values
 
     def _get_subnet(self, availability_zone):

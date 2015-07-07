@@ -48,27 +48,43 @@ class Stack(base.Builder):
                                                        cfg_obj.load())
 
                 dependency = self._maybe_camel_case(resource.get('dependency'))
-                handle = self._maybe_camel_case(resource.get('wait-handle'))
-                
-                builder = service.Service(builder_cfg, resource['name'],
-                                          self._amis, cfg_obj.resource_folder,
+                handle = self._maybe_camel_case(resource.get('wait'))
+                parent = '{0}-{1}'.format(self._config.environment, self.name)
+                builder = service.Service(builder_cfg,
+                                          resource['name'],
+                                          self._amis,
+                                          cfg_obj.resource_folder,
                                           self._environment_stack,
                                           dependency,
-                                          handle)
+                                          handle,
+                                          parent)
 
-                self._outputs.update(builder.outputs)
-                self._resources.update(builder.resources)
+                self._outputs += builder.outputs
+                self._resources += builder.resources
 
             elif resource['type'] == 'rds':
                 LOGGER.debug('Add RDS: %r', resource['name'])
 
             elif resource['type'] == 'wait':
                 LOGGER.debug('Add wait-condition: %r', resource['name'])
-                handle = {'Ref': utils.camel_case(resource['wait-handle'])}
-                obj = cloudformation.WaitCondition(resource.get('count'),
-                                                   handle,
-                                                   resource.get('timeout'))
-                self._add_resource(resource['name'], obj)
+                if resource.get('handle'):
+                    handle = {'Ref': utils.camel_case(resource['handle'])}
+                    wait = cloudformation.WaitCondition(resource.get('count',1),
+                                                        handle,
+                                                        resource.get('timeout',
+                                                                     3600))
+                else:
+                    wait = cloudformation.WaitCondition()
+                    wait.set_creation_policy(resource['count'],
+                                             resource['timeout'])
+                if resource.get('dependency'):
+                    wait.set_dependency(resource['dependency'])
+                self._add_resource(resource['name'], wait)
+
+                cc_name = utils.camel_case(resource['name'])
+                self._add_output(cc_name + 'Data',
+                                 'WaitCondition return data',
+                                  {'Fn::GetAtt': [cc_name, 'Data']})
 
             elif resource['type'] == 'wait-handle':
                 LOGGER.debug('Add wait handle: %s', resource['name'])
