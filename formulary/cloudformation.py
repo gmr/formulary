@@ -56,8 +56,7 @@ class CloudFormation(object):
 
         try:
             result = self._client.create_stack(StackName=template.name,
-                                               TemplateURL=url,
-                                               Tags=tags)
+                                               TemplateURL=url)
         except exceptions.ClientError as error:
             self._s3.delete(template_id)
             raise RequestException(error)
@@ -82,8 +81,7 @@ class CloudFormation(object):
 
         try:
             result = self._client.update_stack(StackName=template.name,
-                                               TemplateURL=url,
-                                               Tags=tags)
+                                               TemplateURL=url)
         except exceptions.ClientError as error:
             self._s3.delete(template_id)
             raise RequestException(error)
@@ -181,6 +179,15 @@ class EnvironmentStack(object):
                 'AWS': {'Region': self._region}
             }
         }
+
+    @property
+    def name(self):
+        """Return the stack name
+
+        :rtype: str
+
+        """
+        return self._name
 
     @property
     def resources(self):
