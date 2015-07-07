@@ -32,7 +32,7 @@ class Stack(base.Resource):
                             'TimeoutInMinutes': timeout}
 
 
-class WaitCondition(base.Resource):
+class WaitCondition(base.CPResource):
     """You can use a wait condition for situations like the following:
 
     To coordinate stack resource creation with configuration actions that are
@@ -47,7 +47,7 @@ class WaitCondition(base.Resource):
     condition, do not specify any of the wait condition's properties.
 
     """
-    def __init__(self, count, handle, timeout):
+    def __init__(self, count=None, handle=None, timeout=None):
         super(WaitCondition,
               self).__init__('AWS::CloudFormation::WaitCondition')
         self._properties = {'Count': count,
