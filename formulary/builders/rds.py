@@ -26,13 +26,14 @@ class RDS(base.Builder):
 
     def _add_instance(self):
         subnets = self._add_subnet_groups()
-        if not self._config.get('multi-az'):
+        if not self._config.settings.get('multi-az'):
             self._config['availability_zone'] = \
                 self._stack.subnets[0].availability_zone
         name = '{0}-{1}'.format(self._config.environment, self._name)
-        resource = rds.DBInstance(name, self._config,
-                                        utils.camel_case(subnets),
-                                        {'Ref': self._security_group})
+        resource = rds.DBInstance(name,
+                                  self._config.settings,
+                                  utils.camel_case(subnets),
+                                  {'Ref': self._security_group})
         resource.add_tag('Environment', self._stack.environment)
         resource.add_tag('Service', self._name)
         self._add_resource(name, resource)
