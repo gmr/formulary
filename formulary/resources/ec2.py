@@ -29,7 +29,7 @@ class BlockDevice(base.Property):
     the AWS::EC2::Instance resource.
 
     """
-    def __init__(self, name, ebs, no_device=None, virtual_name=None):
+    def __init__(self, name, ebs=None, no_device=None, virtual_name=None):
         super(BlockDevice, self).__init__()
         self._values = {'DeviceName': name,
                         'Ebs': ebs,
@@ -58,11 +58,11 @@ class DHCPOptions(base.Resource):
 
 
 
-class Instance(base.Resource):
+class Instance(base.CPResource):
     """The AWS::EC2::Instance type creates an Amazon EC2 instance."""
     def __init__(self, name, ami, availability_zone, block_devices,
                  instance_type, subnet, security_group, user_data,
-                 private_ip=None, dependency=None):
+                 private_ip=None, dependency=None, ebs=True):
         super(Instance, self).__init__('AWS::EC2::Instance')
         self._name = name
         self._subnet = subnet
@@ -80,14 +80,15 @@ class Instance(base.Resource):
             'DisableApiTermination': False,
             'EbsOptimized': False,
             'ImageId': ami,
-            'InstanceInitiatedShutdownBehavior': 'stop',
             'InstanceType': instance_type,
             'KeyName': {'Fn::FindInMap': ['AWS', 'KeyName', 'Value']},
             'Monitoring': False,
             'NetworkInterfaces': [nic],
             'UserData': user_data}
+        if ebs:
+            self._properties['InstanceInitiatedShutdownBehavior'] = 'stop'
         if dependency:
-            self.set_dependency(dependency)
+            self.set_dependency({"Ref": dependency})
 
     @property
     def subnet(self):
