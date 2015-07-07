@@ -21,7 +21,7 @@ class Instance(base.Builder):
 
     def __init__(self, config, name, ami, block_devices, instance_type,
                  private_ip, security_group, subnet, user_data, tags,
-                 dependency):
+                 dependency, ebs=True, stack_name=None):
         """Create a new EC2 instance builder
 
         :param formulary.builders.config.Config: builder configuration
@@ -34,6 +34,8 @@ class Instance(base.Builder):
         :param formulary.resources.ec2.Subnet subnet:
         :param str user_data:
         :param dict tags: Tags to add to the resource
+        :param bool ebs: Is EBS backed
+        :param str stack_name: The name of the parent stack for the instance
 
         """
         super(Instance, self).__init__(config, name)
@@ -53,12 +55,14 @@ class Instance(base.Builder):
                   'region': config.region,
                   'service': config.service,
                   'subnet': subnet.id,
-                  'security_group': security_group}
+                  'security_group': security_group,
+                  'stack': stack_name,
+                  'ebs': ebs}
 
         kwargs['user_data'] = self._render_user_data(user_data, kwargs)
 
         # Remove the kwargs that don't get passed to ec2.Instance
-        for key in ['environment', 'ref_id', 'region', 'service']:
+        for key in ['environment', 'ref_id', 'region', 'service', 'stack']:
             del kwargs[key]
 
         resource = ec2.Instance(**kwargs)
