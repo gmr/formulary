@@ -2,6 +2,7 @@
 Base Builder Class
 
 """
+import collections
 import uuid
 
 from formulary import s3
@@ -21,9 +22,9 @@ class Builder(object):
         """
         self._config = config
         self._name = name
-        self._outputs = {}
-        self._parameters = {}
-        self._resources = {}
+        self._outputs = []
+        self._parameters = []
+        self._resources = []
         self._templates = []
 
     def add_parameter(self, name, value):
@@ -51,7 +52,7 @@ class Builder(object):
         :rtype: dict
 
         """
-        return dict(self._config.mappings)
+        return self._config.mappings
 
     @property
     def name(self):
@@ -66,19 +67,28 @@ class Builder(object):
     def outputs(self):
         """Return the outputs dictionary for the builder
 
-        :rtype: dict
+        :rtype: list
 
         """
-        return dict(self._outputs)
+        return self._outputs
+
+    @property
+    def parameters(self):
+        """Return the parameters dictionary for the builder
+
+        :rtype: list
+
+        """
+        return self._parameters
 
     @property
     def resources(self):
         """Return the resource dictionary for the builder
 
-        :rtype: dict
+        :rtype: list
 
         """
-        return dict(self._resources)
+        return [(k, v.as_dict() if not isinstance(v, dict) else v) for k,v in self._resources]
 
     def upload(self, owner):
         """Upload a template for this builder to S3, returning the ID and
@@ -88,11 +98,11 @@ class Builder(object):
 
         """
         stack = template.Template(utils.camel_case(self.name))
-        stack.set_description('Formulary created {0} owned '
-                              '{1} nested stack'.format(owner, self.name))
+        stack.set_description('Formulary nested stack owned by '
+                              '{0}-{1}'.format(self.environment, owner))
         stack.update_mappings(self._config.mappings)
         stack.update_outputs(self.outputs)
-        stack.update_parameters(self._parameters)
+        stack.update_parameters(self.parameters)
         stack.update_resources(self.resources)
         value = stack.as_json()
         template_id = str(uuid.uuid4())
@@ -110,7 +120,8 @@ class Builder(object):
         :param str|dict value: The value of the output
 
         """
-        self._outputs[name] = {'Description': description, 'Value': value}
+        output = {'Description': description, 'Value': value}
+        self._outputs.append((name, output))
 
     def _add_parameter(self, name, value):
         """Add an parameter that will be added to the template
@@ -119,7 +130,7 @@ class Builder(object):
         :param str|dict value: The value of the parameter
 
         """
-        self._parameters[name] = value
+        self._parameters.append((name, value))
 
     def _add_resource(self, name, resource):
         """Add a resource to the template, returning the cloud formation
@@ -131,11 +142,11 @@ class Builder(object):
 
         """
         resource_id = utils.camel_case(name)
-        self._resources[resource_id] = resource
+        self._resources.append((resource_id, resource))
         return resource_id
 
     def _add_stack(self, name, template_url, parameters=None,
-                   timeout=None, notifications=None):
+                   timeout=None, notifications=None, dependency=None):
         """Add a stack
 
         :param str template_url: URL to the stack to add
@@ -144,10 +155,11 @@ class Builder(object):
         :param list notifications: A list of notification ARNs for the stack
 
         """
-        self._add_resource(name, cloudformation.Stack(template_url,
-                                                      parameters,
-                                                      notifications,
-                                                      timeout))
+        stack = cloudformation.Stack(template_url, parameters,
+                                     notifications, timeout)
+        if dependency:
+            stack.set_dependency(dependency)
+        self._add_resource(name, stack)
 
     def _maybe_replace_with_mapping(self, value):
         """If the value is a ^map macro, replace the with the value from the
