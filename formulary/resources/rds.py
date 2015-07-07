@@ -6,6 +6,7 @@ from formulary.resources import base
 
 
 class DBInstance(base.Resource):
+    """The AWS::RDS::DBInstance type creates an Amazon RDS database instance."""
     def __init__(self, name, config, subnet, security_grp):
         super(DBInstance, self).__init__('AWS::RDS::DBInstance')
         self._name = name
@@ -39,6 +40,11 @@ class DBInstance(base.Resource):
 
 
 class DBSubnetGroup(base.Resource):
+    """The AWS::RDS::DBSubnetGroup type creates an RDS database subnet group.
+    Subnet groups must contain at least one subnet in two availability zones
+    in the region.
+
+    """
     def __init__(self, name, subnets):
         super(DBSubnetGroup, self).__init__('AWS::RDS::DBSubnetGroup')
         self._name = name
