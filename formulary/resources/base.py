@@ -97,7 +97,7 @@ class Resource(object):
     def set_dependency(self, dependency):
         """Set a dependency for the resource to be created
 
-        :param str dependency: The dependency name or reference
+        :param str|dict dependency: The dependency name or reference
 
         """
         self._dependency = dependency
@@ -114,3 +114,38 @@ class Resource(object):
         for key, value in list(self._properties.items()):
             if self._properties[key] is None:
                 del self._properties[key]
+
+
+class CPResource(Resource):
+    """CPResources are resources that support Creation Policies"""
+    def __init__(self, resource_type):
+        super(CPResource, self).__init__(resource_type)
+        self._policy = {}
+
+    def as_dict(self):
+        """Return the resource as a dictionary for building the cloud-formation
+        configuration.
+
+        :return: dict
+
+        """
+        dict_val = super(CPResource, self).as_dict()
+        if self._policy:
+            dict_val['CreationPolicy'] = dict(self._policy)
+        return dict_val
+
+    def set_handle(self, handle):
+        self._properties['Handle'] = handle
+
+    def set_timeout(self, timeout):
+        self._properties['Timeout'] = timeout
+
+    def set_creation_policy(self, signal_count, timeout):
+        """Set a dependency for the resource to be created
+
+        :param str dependency: The dependency name or reference
+
+        """
+        self._policy = {'ResourceSignal':
+                            {'Count': signal_count,
+                             'Timeout': timeout}}
