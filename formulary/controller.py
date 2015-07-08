@@ -109,7 +109,12 @@ class Controller(object):
         self._template.update_resources(builder.resources)
 
     def _build_rds_resources(self):
-        builder = rds.RDS(self._get_builder_config(), self._resource,
+        builder_config = self._get_builder_config()
+
+        if builder_config.settings.get('stack-only'):
+            self._error("The specified service is designated as stack-only.")
+
+        builder = rds.RDS(builder_config, self._resource,
                           self._environment_stack)
         self._template.update_outputs(builder.outputs)
         self._template.update_parameters(builder.parameters)
@@ -118,7 +123,12 @@ class Controller(object):
     def _build_service_resources(self):
         service_path = path.join(self._config_path,
                                  self._config_obj.resource_folder)
-        builder = service.Service(self._get_builder_config(),
+        builder_config = self._get_builder_config()
+
+        if builder_config.settings.get('stack-only'):
+            self._error("The specified service is designated as stack-only.")
+
+        builder = service.Service(builder_config,
                                   self._resource, self._amis,
                                   service_path, self._environment_stack)
         self._template.update_outputs(builder.outputs)
