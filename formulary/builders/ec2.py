@@ -44,7 +44,7 @@ class Instance(base.Builder):
         self._s3 = s3.S3(config.s3_bucket, config.s3_prefix, config.profile)
 
         # Build kwargs used for user-data template and ec2.Instance
-        kwargs = {'name': self.full_name,
+        kwargs = {'name': self.name,
                   'ami': ami,
                   'availability_zone': subnet.availability_zone,
                   'block_devices': block_devices,
@@ -133,6 +133,9 @@ class SecurityGroup(base.Builder):
         self._add_output('SecurityGroupId',
                          'The physical ID for the security group',
                          {'Ref': self.reference_id})
+
+        self._add_tag_to_resources('Environment', config.environment)
+        self._add_tag_to_resources('Service', owner)
 
     def _add_security_group(self):
         if isinstance(self._config.settings.get('security-group'), str):
