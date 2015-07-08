@@ -53,10 +53,12 @@ class Service(base.Builder):
             subnet = subnets.pop(0)
             if not handle:
                 handle = self._maybe_add_wait_handle(index)
-            ref_id = self._add_instance('instance-{0}'.format(index), subnet,
+            ref_id = self._add_instance('instance{0}'.format(index), subnet,
                                         settings, handle, wait)
             if not wait:
                 wait = self._maybe_add_wait_condition(index, handle, ref_id)
+
+    # Add same-az instances in a method matching auto-balanced ones
 
     def _add_elb(self, name, config):
         if self._parent:
@@ -157,7 +159,7 @@ class Service(base.Builder):
             self._maybe_add_availability_zone(settings)
             subnet = self._get_subnet(settings['availability_zone'])
             for index in range(0, settings.get('instance-count', 1)):
-                self._add_instance('instance-{0}'.format(index),
+                self._add_instance('instance{0}'.format(index),
                                    subnet, settings)
         elif settings.get('instance-strategy') == 'az-balanced':
             return self._add_autobalanced_instances(settings)
