@@ -105,12 +105,14 @@ class Controller(object):
                                               self._s3_prefix, self._profile)
         builder = environment.Environment(builder_config, self._resource)
         self._template.update_outputs(builder.outputs)
+        self._template.update_parameters(builder.parameters)
         self._template.update_resources(builder.resources)
 
     def _build_rds_resources(self):
         builder = rds.RDS(self._get_builder_config(), self._resource,
                           self._environment_stack)
         self._template.update_outputs(builder.outputs)
+        self._template.update_parameters(builder.parameters)
         self._template.update_resources(builder.resources)
 
     def _build_service_resources(self):
@@ -120,6 +122,7 @@ class Controller(object):
                                   self._resource, self._amis,
                                   service_path, self._environment_stack)
         self._template.update_outputs(builder.outputs)
+        self._template.update_parameters(builder.parameters)
         self._template.update_resources(builder.resources)
         return builder
 
@@ -128,6 +131,7 @@ class Controller(object):
                               self._resource, self._config_obj.base_path,
                               self._amis, self._environment_stack)
         self._template.update_outputs(builder.outputs)
+        self._template.update_parameters(builder.parameters)
         self._template.update_resources(builder.resources)
         return builder
 
