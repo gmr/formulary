@@ -107,9 +107,7 @@ class ResourceConfig(object):
             settings = self.load_file(self.resource_folder, self._resource_type)
         else:
             settings = self.load_file(self.resource_folder, self._resource)
-        config = self._flatten_config(settings)
-        print('config', config)
-        return config
+        return self._flatten_config(settings)
 
     def load_file(self, folder, file):
         """Return the contents of the specified configuration file in the
