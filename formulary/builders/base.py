@@ -61,7 +61,7 @@ class Builder(object):
         :rtype: str
 
         """
-        return '-'.join([self.environment, self.name])
+        return '-'.join([self._config.service, self.name])
 
     @property
     def mappings(self):
