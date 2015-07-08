@@ -30,8 +30,6 @@ class LoadBalancer(base.Builder):
                                             self._health_check(elb_config),
                                             self._listeners(elb_config),
                                             [{'Ref': security_group}], subnets))
-        self._add_tag_to_resources('Environment', config.environment)
-        self._add_tag_to_resources('Service', service)
         self._add_output('DNSName',
                          'The DNSName for {0}'.format(self.full_name),
                          {'Fn::GetAtt': [self.reference_id, 'DNSName']})
@@ -39,6 +37,8 @@ class LoadBalancer(base.Builder):
                          'The HostedZoneId for {0}'.format(self.full_name),
                          {'Fn::GetAtt': [self.reference_id,
                                          'CanonicalHostedZoneNameID']})
+        self._add_tag_to_resources('Environment', config.environment)
+        self._add_tag_to_resources('Service', service)
 
     @staticmethod
     def _create_listener(config):
