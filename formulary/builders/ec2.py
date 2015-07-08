@@ -3,6 +3,7 @@ Build Cloud Formation EC2 stacks
 
 """
 import json
+import logging
 import re
 
 from formulary.builders import base
@@ -10,6 +11,7 @@ from formulary.resources import ec2
 from formulary import s3
 from formulary import utils
 
+LOGGER = logging.getLogger(__name__)
 
 DEFAULT_INSTANCE_TYPE = 't2.small'
 USER_DATA_RE = re.compile(r'\{\^(?P<command>instance|map)\s(?P<key>[\w\.]+)\}')
@@ -85,7 +87,11 @@ class Instance(base.Builder):
             if match.group(1) == 'map':
                 value = self._config.mappings
                 for key in str(match.group(2)).split('.'):
-                    value = value.get(key.strip())
+                    try:
+                        value = value.get(key.strip())
+                    except AttributeError:
+                        LOGGER.warning('Error assigning user-data value '
+                                       'to "%s", value does not exist', key)
                 content = content.replace(match.group(0), value)
             elif match.group(1) == 'instance':
                 content = content.replace(match.group(0),
