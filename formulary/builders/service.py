@@ -12,8 +12,6 @@ from formulary.resources import cloudformation
 from formulary.builders import ec2
 from formulary.resources import ec2 as ec2_resources
 from formulary.builders import elb
-
-from formulary.builders import securitygroup
 from formulary import utils
 
 LOGGER = logging.getLogger(__name__)
@@ -41,7 +39,7 @@ class Service(base.Builder):
         self._security_group = self._add_security_group()
         self._add_instances()
 
-        #self._maybe_add_elbs()
+        self._maybe_add_elbs()
         #self._maybe_add_route53_resources(self._config)
         self._add_tag_to_resources('Environment', self._config.environment)
         self._add_tag_to_resources('Service', self._name)
@@ -51,8 +49,26 @@ class Service(base.Builder):
         subnets = self._get_subnets(count)
         for index in range(0, count):
             subnet = subnets.pop(0)
-            self._add_instance('{0}{1}'.format(self._name, index),
-                               subnet, settings)
+            self._add_instance('instance-{0}'.format(index), subnet, settings)
+
+    def _add_elb(self, name, config):
+        if self._parent:
+            name = '{0}-{1}'.format(self._parent, name)
+        builder = elb.LoadBalancer(self._config, name, self.name, config,
+                                   self._instances, 'SecurityGroupId',
+                                   self.subnet_ids)
+        builder.add_parameter('SecurityGroupId', {'Type': 'String'})
+        parameters = {'SecurityGroupId':
+                          {'Fn::GetAtt': [self._security_group,
+                                          'Outputs.SecurityGroupId']}}
+
+        for instance in self._instances:
+            builder.add_parameter(instance, {'Type': 'String'})
+            parameters[instance] = {'Fn::GetAtt': [instance,
+                                                   'Outputs.InstanceId']}
+
+        template_id, url = builder.upload(self._name)
+        self._add_stack(name, url, parameters)
 
     def _add_instance(self, name, subnet, config):
         """Add an instance to the resources for the given name, subnet, and
@@ -64,7 +80,9 @@ class Service(base.Builder):
         :rtype: str
 
         """
-        LOGGER.debug('Adding instance %s', name)
+        if self._parent:
+            name = '{0}-{1}'.format(self._parent, name)
+        LOGGER.debug('Adding %s', name)
         block_devices = self._get_block_devices(config.get('block_devices'))
         instance = ec2.Instance(self._config, name,
                                 self._get_ami_id(),
@@ -75,24 +93,16 @@ class Service(base.Builder):
                                 subnet,
                                 self._read_user_data(),
                                 self._tags,
-                                None,
                                 config.get('ebs', True),
                                 self._parent or self._environment_stack.name)
 
         instance.add_parameter('SecurityGroupId',
                                {'Type': 'String',
                                 'Description': 'Security Group Physical ID'})
-        parameters = {'SecurityGroupId':
-                             {'Fn::GetAtt': [self._security_group,
-                                             'Outputs.SecurityGroupId']}}
 
-        """
-        if dependency:
-            instance.add_parameter(dependency,
-                                   {'Type': 'String',
-                                    'Description': 'Resource dependency'})
-            parameters[dependency] = {'Ref': dependency}
-        """
+        parameters = {'SecurityGroupId':
+                          {'Fn::GetAtt': [self._security_group,
+                                          'Outputs.SecurityGroupId']}}
 
         if self._wait_handle:
             instance.add_parameter(self._wait_handle,
@@ -104,6 +114,7 @@ class Service(base.Builder):
 
         dependency = config.get('dependency') or self._dependency
         self._add_stack(name, url, parameters, dependency=dependency)
+        self._instances.append(utils.camel_case(name))
 
     def _add_instances(self):
         settings = self._config.settings
@@ -123,7 +134,7 @@ class Service(base.Builder):
             self._maybe_add_availability_zone(settings)
             subnet = self._get_subnet(settings['availability_zone'])
             for index in range(0, settings.get('instance-count', 1)):
-                self._add_instance('{1}{2}'.format(self._name, index),
+                self._add_instance('instance-{0}'.format(index),
                                    subnet, settings)
         elif settings.get('instance-strategy') == 'az-balanced':
             return self._add_autobalanced_instances(settings)
@@ -132,18 +143,14 @@ class Service(base.Builder):
                              '{0}'.format(settings['instance-strategy']))
 
     def _add_security_group(self):
-        builder = securitygroup.SecurityGroup(self._config,
-                                              self._name,
-                                              self._environment_stack)
-        template_id, url = builder.upload(self.name)
-        security_group_stack = '{0}-security-group-stack'.format(self._name)
-        stack_name = utils.camel_case(security_group_stack)
-        self._add_stack(security_group_stack, url)
-        return stack_name
-
-    def _add_tag_to_resources(self, tag, value):
-        for (k, resource) in self._resources:
-            resource.add_tag(tag, value)
+        name = 'security-group'
+        if self._parent:
+            name = '{0}-{1}'.format(self._parent, name)
+        builder = ec2.SecurityGroup(self._config, name,
+                                    self._environment_stack, self._name)
+        template_id, url = builder.upload(self._name)
+        self._add_stack(name, url)
+        return utils.camel_case(name)
 
     def _add_wait_condition(self, name):
         self._add_resource(name, cloudformation.WaitConditionHandle())
@@ -193,8 +200,26 @@ class Service(base.Builder):
             config['availability_zone'] = \
                 self._environment_stack.subnets[offset].availability_zone
 
+    def _maybe_add_elbs(self):
+        if not self._config.settings.get('elb'):
+            return
+        if isinstance(self._config.settings['elb'], list):
+            for config in self._config.settings['elb']:
+                self._add_elb(config['name'], config)
+        elif isinstance(self._config.settings['elb'], dict):
+            self._add_elb('elb', self._config.settings['elb'])
+
     def _read_user_data(self):
         if self._config.settings.get('user-data'):
             with open(path.join(self._local_path,
                                 self._config.settings['user-data'])) as handle:
                 return handle.read()
+
+    @property
+    def subnet_ids(self):
+        """Return a list of Subnet IDs for the VPC
+
+        :rtype: list
+
+        """
+        return [s.id for s in self._environment_stack.subnets]
