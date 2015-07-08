@@ -81,8 +81,18 @@ class ResourceConfig(object):
         """
         output = {}
         for key, value in cfg.items():
-            if isinstance(value, dict) and self.environment in value:
-                output[key] = value[self.environment]
+            if isinstance(value, dict):
+                if self.environment in value.keys():
+                    output[key] = value[self.environment]
+                else:
+                    output[key] = self._flatten_config(value)
+            elif isinstance(value, list):
+                output[key] = []
+                for list_value in value:
+                    if isinstance(list_value, dict):
+                        output[key].append(self._flatten_config(list_value))
+                    else:
+                        output[key].append(list_value)
             else:
                 output[key] = value
         return output
@@ -94,12 +104,12 @@ class ResourceConfig(object):
 
         """
         if self._resource_type in ['environment', 'service']:
-            settings = self.load_file(self.resource_folder,
-                                      self._resource_type)
+            settings = self.load_file(self.resource_folder, self._resource_type)
         else:
-            settings = self.load_file(self.resource_folder,
-                                              self._resource)
-        return self._flatten_config(settings)
+            settings = self.load_file(self.resource_folder, self._resource)
+        config = self._flatten_config(settings)
+        print('config', config)
+        return config
 
     def load_file(self, folder, file):
         """Return the contents of the specified configuration file in the
