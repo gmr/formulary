@@ -2,9 +2,9 @@
 Build the resources for a RDS Instance
 
 """
-from formulary.resources import rds
 from formulary.builders import base
-from formulary.builders import securitygroup
+from formulary.builders import ec2
+from formulary.resources import rds
 from formulary import utils
 
 DEFAULT_BACKUP_RETENTION = 3
@@ -39,11 +39,11 @@ class RDS(base.Builder):
         self._add_resource(name, resource)
 
     def _add_security_group(self):
-        builder = securitygroup.SecurityGroup(self._config,
-                                              self._name,
-                                              self._stack)
+        name = '{0}-security-group'.format(self._name)
+        builder = ec2.SecurityGroup(self._config, name, self._stack,
+                                    self._name)
         self._resources.update(builder.resources)
-        return utils.camel_case(builder.logical_id)
+        return builder.reference_id
 
     def _add_subnet_groups(self):
         subnets = []
