@@ -53,9 +53,9 @@ class CloudFormation(object):
         tags = [{'Key': 'Environment', 'Value': environment}]
         if service:
             tags.append({'Key': 'Service', 'Value': service})
-
         try:
             result = self._client.create_stack(StackName=template.name,
+                                               Tags=tags,
                                                TemplateURL=url)
         except exceptions.ClientError as error:
             self._s3.delete(template_id)
@@ -64,30 +64,22 @@ class CloudFormation(object):
         LOGGER.debug('Created stack ID: %r', result['StackId'])
         return result['StackId']
 
-    def update_stack(self, template, environment, service=None):
+    def update_stack(self, template):
         """Update a stack in the specified region with the given template.
 
         :param Template template: The template to use
-        :param str environment: The environment to set in a stack tag
-        :param str|None service: The service name to set in a stack tag
         :raises: RequestException
 
         """
         template_id = str(uuid.uuid4())
         url = self._s3.upload(template_id, template.as_json())
-        tags = [{'Key': 'Environment', 'Value': environment}]
-        if service:
-            tags.append({'Key': 'Service', 'Value': service})
-
         try:
             result = self._client.update_stack(StackName=template.name,
                                                TemplateURL=url)
         except exceptions.ClientError as error:
             self._s3.delete(template_id)
             raise RequestException(error)
-
         LOGGER.debug('Updated stack ID: %r', result['StackId'])
-
 
 
 class _API(object):

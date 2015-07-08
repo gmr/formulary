@@ -94,8 +94,7 @@ class Controller(object):
 
         elif self._action == 'update':
             try:
-                self._cloud_formation.update_stack(self._template, env,
-                                                   service_name)
+                self._cloud_formation.update_stack(self._template)
                 print('Stack updated')
             except cloudformation.RequestException as error:
                 self._error(str(error))
