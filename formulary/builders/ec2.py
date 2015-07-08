@@ -157,9 +157,41 @@ class SecurityGroup(base.Builder):
                 port, source = dict(row).popitem()
             except KeyError:
                 continue
+            if source == 'security-group':
+                continue
             protocol, from_port, to_port = utils.parse_port_value(port)
             cidr_block = utils.find_in_map(source)
             rules.append(ec2.SecurityGroupRule(protocol,
                                                from_port, to_port,
                                                cidr_block).as_dict())
         return rules
+
+
+class SecurityGroupIngress(base.Builder):
+
+    def __init__(self, config, name, stack, owner):
+        super(SecurityGroupIngress, self).__init__(config, name)
+        self._owner = owner
+        self._name = name
+        self._stack = stack
+        self._add_parameter('SecurityGroupId', {'Type': 'String'})
+
+        for port in self._get_ingress_ports():
+            protocol, from_port, to_port = utils.parse_port_value(port)
+            ref_id = {'Ref': 'SecurityGroupId'}
+            resource = ec2.SecurityGroupIngress(ref_id, protocol, from_port,
+                                                to_port, ref_id)
+            name = '{0}-{1}-{2}'.format(self._name, protocol, to_port)
+            self._add_resource(name, resource)
+
+    def _get_ingress_ports(self):
+        ports = []
+        group = self._config.settings.get('security-group', {})
+        for row in list(group.get('ingress', {})):
+            try:
+                port, source = dict(row).popitem()
+            except KeyError:
+                continue
+            if source == 'security-group':
+                ports.append(port)
+        return ports

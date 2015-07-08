@@ -160,15 +160,17 @@ class SecurityGroupIngress(base.Resource):
     Amazon EC2 or Amazon VPC security group.
 
     """
-    def __init__(self, group_name, ip_protocol, from_port, to_port,
-                 source_security_group_name):
+    tags = False
+
+    def __init__(self, group_id, ip_protocol, from_port, to_port,
+                 source_security_group_id):
         super(SecurityGroupIngress,
               self).__init__('AWS::EC2::SecurityGroupIngress')
-        self._properties['GroupName'] = group_name
+        self._properties['GroupId'] = group_id
         self._properties['IpProtocol'] = ip_protocol
         self._properties['FromPort'] = from_port
         self._properties['ToPort'] = to_port
-        self._properties['SourceSecurityGroupName'] = source_security_group_name
+        self._properties['SourceSecurityGroupId'] = source_security_group_id
 
 
 class SecurityGroupRule(base.Property):

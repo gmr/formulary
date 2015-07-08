@@ -38,6 +38,7 @@ class Service(base.Builder):
         self._environment_stack = environment_stack
         self._parent = parent
         self._security_group = self._add_security_group()
+        self._maybe_add_security_group_ingress()
         self._add_instances()
 
         self._maybe_add_elbs()
@@ -56,36 +57,6 @@ class Service(base.Builder):
                                         settings, handle, wait)
             if not wait:
                 wait = self._maybe_add_wait_condition(index, handle, ref_id)
-
-    def _maybe_add_wait_handle(self, index):
-        if 'wait-condition' not in self._config.settings:
-            return
-        settings = self._config.settings['wait-condition']
-        if index == settings['after-node']:
-            name = utils.dash_delimited(settings['handle']) or self._name
-            if self._parent:
-                name = '{0}-{1}'.format(self._parent, name)
-            self._add_resource(name,
-                               cloudformation.WaitConditionHandle())
-            return utils.camel_case(name)
-
-    def _maybe_add_wait_condition(self, index, handle, ref_id):
-        if 'wait-condition' not in self._config.settings:
-            return
-        settings = self._config.settings['wait-condition']
-        if index == settings['after-node']:
-            name = '{0}-wait'.format(self._name)
-            if self._parent:
-                name = '{0}-{1}'.format(self._parent, name)
-            handle = {'Ref': handle}
-            timeout = settings.get('timeout', 3600)
-            wait = cloudformation.WaitCondition(1, handle, timeout)
-            wait.set_dependency(ref_id)
-            self._add_resource(name, wait)
-            cc_name = utils.camel_case(name)
-            self._add_output(cc_name + 'Data', 'WaitCondition return data',
-                             {'Fn::GetAtt': [cc_name, 'Data']})
-            return cc_name
 
     def _add_elb(self, name, config):
         if self._parent:
@@ -182,6 +153,7 @@ class Service(base.Builder):
                              '{0}'.format(settings['instance-strategy']))
 
     def _add_security_group(self):
+        LOGGER.debug('Adding security group')
         name = 'security-group'
         if self._parent:
             name = '{0}-{1}'.format(self._parent, name)
@@ -261,6 +233,52 @@ class Service(base.Builder):
                                                   'Outputs.HostedZoneId']}}
 
         self._add_stack(name, url, params)
+
+    def _maybe_add_security_group_ingress(self):
+        LOGGER.debug('Possibly adding security group ingress rules')
+        name = 'security-group-ingress'
+        if self._parent:
+            name = '{0}-{1}'.format(self._parent, name)
+        builder = ec2.SecurityGroupIngress(self._config, name,
+                                           self._environment_stack,
+                                           self._name)
+        parameters = {'SecurityGroupId':
+                          {'Fn::GetAtt': [self._security_group,
+                                          'Outputs.SecurityGroupId']}}
+        if builder.resources:
+            template_id, url = builder.upload(self._name)
+            self._add_stack(name, url, parameters,
+                            dependency=self._security_group)
+
+    def _maybe_add_wait_condition(self, index, handle, ref_id):
+        if 'wait-condition' not in self._config.settings:
+            return
+        settings = self._config.settings['wait-condition']
+        if index == settings['after-node']:
+            name = '{0}-wait'.format(self._name)
+            if self._parent:
+                name = '{0}-{1}'.format(self._parent, name)
+            handle = {'Ref': handle}
+            timeout = settings.get('timeout', 3600)
+            wait = cloudformation.WaitCondition(1, handle, timeout)
+            wait.set_dependency(ref_id)
+            self._add_resource(name, wait)
+            cc_name = utils.camel_case(name)
+            self._add_output(cc_name + 'Data', 'WaitCondition return data',
+                             {'Fn::GetAtt': [cc_name, 'Data']})
+            return cc_name
+
+    def _maybe_add_wait_handle(self, index):
+        if 'wait-condition' not in self._config.settings:
+            return
+        settings = self._config.settings['wait-condition']
+        if index == settings['after-node']:
+            name = utils.dash_delimited(settings['handle']) or self._name
+            if self._parent:
+                name = '{0}-{1}'.format(self._parent, name)
+            self._add_resource(name,
+                               cloudformation.WaitConditionHandle())
+            return utils.camel_case(name)
 
     def _read_user_data(self):
         if self._config.settings.get('user-data'):
