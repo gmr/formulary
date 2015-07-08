@@ -47,6 +47,8 @@ class WaitCondition(base.CPResource):
     condition, do not specify any of the wait condition's properties.
 
     """
+    tags = False
+
     def __init__(self, count=None, handle=None, timeout=None):
         super(WaitCondition,
               self).__init__('AWS::CloudFormation::WaitCondition')
@@ -65,6 +67,8 @@ class WaitConditionHandle(base.Resource):
     a failure signal.
 
     """
+    tags = False
+
     def __init__(self):
         super(WaitConditionHandle,
               self).__init__('AWS::CloudFormation::WaitConditionHandle')
