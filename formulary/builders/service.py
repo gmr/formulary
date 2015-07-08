@@ -118,6 +118,19 @@ class Service(base.Builder):
             instance.add_parameter(wait_handle, {'Type': 'String'})
             parameters[wait_handle] = {'Ref': wait_handle}
 
+        # Add any SecurityGroupIngress resources for public-ingress support
+        for port in config.get('public-ingress'):
+            protocol, from_port, to_port = utils.parse_port_value(port)
+            cidr = {'Fn::Join': ['',
+                                 [{'Fn::GetAtt': [utils.camel_case(name),
+                                                  'PublicIp']}, '/32']]}
+            resource = \
+                ec2_resources.SecurityGroupIngress({'Ref': 'SecurityGroupId'},
+                                                   protocol, from_port, to_port,
+                                                   cidr)
+            instance.add_resource('{0}-{1}-{2}'.format(self._name, protocol,
+                                                    to_port), resource)
+
         template_id, url = instance.upload(self._name)
 
         dependency = dependency or config.get('dependency') or self._dependency
@@ -154,9 +167,9 @@ class Service(base.Builder):
 
     def _add_security_group(self):
         LOGGER.debug('Adding security group')
-        name = 'security-group'
+        name = '{0}-security-group'.format(self._config.service)
         if self._parent:
-            name = '{0}-{1}'.format(self._parent, name)
+            name = '{0}-security-group'.format(self._parent)
         builder = ec2.SecurityGroup(self._config, name,
                                     self._environment_stack, self._name)
         template_id, url = builder.upload(self._name)
