@@ -44,7 +44,7 @@ class Instance(base.Builder):
         self._s3 = s3.S3(config.s3_bucket, config.s3_prefix, config.profile)
 
         # Build kwargs used for user-data template and ec2.Instance
-        kwargs = {'name': self.name,
+        kwargs = {'name': self.full_name,
                   'ami': ami,
                   'availability_zone': subnet.availability_zone,
                   'block_devices': block_devices,
