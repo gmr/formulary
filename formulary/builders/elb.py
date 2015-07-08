@@ -32,6 +32,13 @@ class LoadBalancer(base.Builder):
                                             [{'Ref': security_group}], subnets))
         self._add_tag_to_resources('Environment', config.environment)
         self._add_tag_to_resources('Service', service)
+        self._add_output('DNSName',
+                         'The DNSName for {0}'.format(self.full_name),
+                         {'Fn::GetAtt': [self.reference_id, 'DNSName']})
+        self._add_output('HostedZoneId',
+                         'The HostedZoneId for {0}'.format(self.full_name),
+                         {'Fn::GetAtt': [self.reference_id,
+                                         'CanonicalHostedZoneNameID']})
 
     @staticmethod
     def _create_listener(config):
