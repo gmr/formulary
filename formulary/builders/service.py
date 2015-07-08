@@ -12,6 +12,7 @@ from formulary.resources import cloudformation
 from formulary.builders import ec2
 from formulary.resources import ec2 as ec2_resources
 from formulary.builders import elb
+from formulary.builders import route53
 from formulary import utils
 
 LOGGER = logging.getLogger(__name__)
@@ -40,16 +41,49 @@ class Service(base.Builder):
         self._add_instances()
 
         self._maybe_add_elbs()
-        #self._maybe_add_route53_resources(self._config)
         self._add_tag_to_resources('Environment', self._config.environment)
         self._add_tag_to_resources('Service', self._name)
 
     def _add_autobalanced_instances(self, settings):
         count = settings.get('instance-count', 1)
         subnets = self._get_subnets(count)
+        wait = None
         for index in range(0, count):
             subnet = subnets.pop(0)
-            self._add_instance('instance-{0}'.format(index), subnet, settings)
+            handle = self._maybe_add_wait_handle(index)
+            ref_id = self._add_instance('instance-{0}'.format(index), subnet,
+                                        settings, handle, wait)
+            wait = self._maybe_add_wait_condition(index, handle, ref_id)
+
+    def _maybe_add_wait_handle(self, index):
+        if 'wait-condition' not in self._config.settings:
+            return
+        settings = self._config.settings['wait-condition']
+        if index == settings['after-node']:
+            name = utils.dash_delimited(settings['handle']) or self._name
+            if self._parent:
+                name = '{0}-{1}'.format(self._parent, name)
+            self._add_resource(name,
+                               cloudformation.WaitConditionHandle())
+            return utils.camel_case(name)
+
+    def _maybe_add_wait_condition(self, index, handle, ref_id):
+        if 'wait-condition' not in self._config.settings:
+            return
+        settings = self._config.settings['wait-condition']
+        if index == settings['after-node']:
+            name = '{0}-wait'.format(self._name)
+            if self._parent:
+                name = '{0}-{1}'.format(self._parent, name)
+            handle = {'Ref': handle}
+            timeout = settings.get('timeout', 3600)
+            wait = cloudformation.WaitCondition(1, handle, timeout)
+            wait.set_dependency(ref_id)
+            self._add_resource(name, wait)
+            cc_name = utils.camel_case(name)
+            self._add_output(cc_name + 'Data', 'WaitCondition return data',
+                             {'Fn::GetAtt': [cc_name, 'Data']})
+            return cc_name
 
     def _add_elb(self, name, config):
         if self._parent:
@@ -69,8 +103,10 @@ class Service(base.Builder):
 
         template_id, url = builder.upload(self._name)
         self._add_stack(name, url, parameters)
+        self._maybe_add_route53_record(config, utils.camel_case(name))
 
-    def _add_instance(self, name, subnet, config):
+    def _add_instance(self, name, subnet, config,
+                      wait_handle=None, dependency=None):
         """Add an instance to the resources for the given name, subnet, and
         config.
 
@@ -104,17 +140,18 @@ class Service(base.Builder):
                           {'Fn::GetAtt': [self._security_group,
                                           'Outputs.SecurityGroupId']}}
 
-        if self._wait_handle:
-            instance.add_parameter(self._wait_handle,
-                                   {'Type': 'String',
-                                    'Description': 'Resource wait handle'})
-            parameters[self._wait_handle] = {'Ref': self._wait_handle}
+        wait_handle = wait_handle or self._wait_handle
+        if wait_handle:
+            instance.add_parameter(wait_handle, {'Type': 'String'})
+            parameters[wait_handle] = {'Ref': wait_handle}
 
         template_id, url = instance.upload(self._name)
 
-        dependency = config.get('dependency') or self._dependency
+        dependency = dependency or config.get('dependency') or self._dependency
         self._add_stack(name, url, parameters, dependency=dependency)
-        self._instances.append(utils.camel_case(name))
+        ref_id = utils.camel_case(name)
+        self._instances.append(ref_id)
+        return ref_id
 
     def _add_instances(self):
         settings = self._config.settings
@@ -208,6 +245,20 @@ class Service(base.Builder):
                 self._add_elb(config['name'], config)
         elif isinstance(self._config.settings['elb'], dict):
             self._add_elb('elb', self._config.settings['elb'])
+
+    def _maybe_add_route53_record(self, config, ref_name):
+        if 'route53' not in config:
+            return
+        name = '{0}-route53'.format(ref_name)
+        builder = route53.Route53RecordSet(self._config, name,
+                                           config['route53'])
+        template_id, url = builder.upload(self._name)
+
+        params = {'DNSName': {'Fn::GetAtt': [ref_name, 'Outputs.DNSName']},
+                  'HostedZoneId': {'Fn::GetAtt': [ref_name,
+                                                  'Outputs.HostedZoneId']}}
+
+        self._add_stack(name, url, params)
 
     def _read_user_data(self):
         if self._config.settings.get('user-data'):
