@@ -47,13 +47,15 @@ class Service(base.Builder):
     def _add_autobalanced_instances(self, settings):
         count = settings.get('instance-count', 1)
         subnets = self._get_subnets(count)
-        wait = None
+        handle, wait = None, None
         for index in range(0, count):
             subnet = subnets.pop(0)
-            handle = self._maybe_add_wait_handle(index)
+            if not handle:
+                handle = self._maybe_add_wait_handle(index)
             ref_id = self._add_instance('instance-{0}'.format(index), subnet,
                                         settings, handle, wait)
-            wait = self._maybe_add_wait_condition(index, handle, ref_id)
+            if not wait:
+                wait = self._maybe_add_wait_condition(index, handle, ref_id)
 
     def _maybe_add_wait_handle(self, index):
         if 'wait-condition' not in self._config.settings:
