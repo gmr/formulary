@@ -155,6 +155,22 @@ class SecurityGroup(base.Resource):
         self._properties['VpcId'] = vpc
 
 
+class SecurityGroupIngress(base.Resource):
+    """The AWS::EC2::SecurityGroupIngress resource adds an ingress rule to an
+    Amazon EC2 or Amazon VPC security group.
+
+    """
+    def __init__(self, group_name, ip_protocol, from_port, to_port,
+                 source_security_group_name):
+        super(SecurityGroupIngress,
+              self).__init__('AWS::EC2::SecurityGroupIngress')
+        self._properties['GroupName'] = group_name
+        self._properties['IpProtocol'] = ip_protocol
+        self._properties['FromPort'] = from_port
+        self._properties['ToPort'] = to_port
+        self._properties['SourceSecurityGroupName'] = source_security_group_name
+
+
 class SecurityGroupRule(base.Property):
     def __init__(self, protocol, from_port,
                  to_port=None,
