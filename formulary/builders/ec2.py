@@ -73,7 +73,7 @@ class Instance(base.Builder):
 
         # Add private and public IP output
         self._add_output('InstanceId',
-                         'The physical ID for {0}'.format(self.full_name),
+                         'The logical ID for {0}'.format(self.full_name),
                          {'Ref': ref_id})
         self._add_output('PrivateIP',
                          'Private IP address for {0}'.format(self.full_name),
