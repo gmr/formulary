@@ -2,6 +2,8 @@
 Common Utility Methods
 
 """
+import re
+
 DEFAULT_PROTOCOL = 'tcp'
 
 
@@ -13,6 +15,17 @@ def camel_case(value):
 
     """
     return ''.join(x.capitalize() for x in value.replace('-', '_').split('_'))
+
+
+def dash_delimited(value):
+    """Convert a camelCase value to a dash-delimited value
+
+    :param str value: The value to convert
+    :rtype: str
+
+    """
+    return re.sub('([a-z0-9])([A-Z])', r'\1-\2',
+                  re.sub('(.)([A-Z][a-z]+)', r'\1-\2', value)).lower()
 
 
 def find_in_map(value):
