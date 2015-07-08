@@ -2,7 +2,6 @@
 Base Builder Class
 
 """
-import collections
 import uuid
 
 from formulary import s3
