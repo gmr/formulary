@@ -21,7 +21,7 @@ class Instance(base.Builder):
 
     def __init__(self, config, name, ami, block_devices, instance_type,
                  private_ip, security_group, subnet, user_data, tags,
-                 dependency, ebs=True, stack_name=None):
+                 ebs=True, stack_name=None, dependency=None):
         """Create a new EC2 instance builder
 
         :param formulary.builders.config.Config: builder configuration
@@ -40,10 +40,9 @@ class Instance(base.Builder):
         """
         super(Instance, self).__init__(config, name)
         self._s3 = s3.S3(config.s3_bucket, config.s3_prefix, config.profile)
-        full_name = '{0}-service-{1}'.format(config.environment, name)
 
         # Build kwargs used for user-data template and ec2.Instance
-        kwargs = {'name': full_name,
+        kwargs = {'name': self.full_name,
                   'ami': ami,
                   'availability_zone': subnet.availability_zone,
                   'block_devices': block_devices,
@@ -51,7 +50,7 @@ class Instance(base.Builder):
                   'environment': config.environment,
                   'instance_type': instance_type,
                   'private_ip': private_ip,
-                  'ref_id': utils.camel_case(full_name),
+                  'ref_id': self.reference_id,
                   'region': config.region,
                   'service': config.service,
                   'subnet': subnet.id,
@@ -68,14 +67,17 @@ class Instance(base.Builder):
         resource = ec2.Instance(**kwargs)
         for key, value in tags.items():
             resource.add_tag(key, value)
-        ref_id = self._add_resource(full_name, resource)
+        ref_id = self._add_resource(self.name, resource)
 
         # Add private and public IP output
+        self._add_output('InstanceId',
+                         'The physical ID for {0}'.format(self.full_name),
+                         {'Ref': ref_id})
         self._add_output('PrivateIP',
-                         'Private IP address for {0}'.format(full_name),
+                         'Private IP address for {0}'.format(self.full_name),
                          {'Fn::GetAtt': [ref_id, 'PrivateIp']})
         self._add_output('PublicIP',
-                         'Public IP address for {0}'.format(full_name),
+                         'Public IP address for {0}'.format(self.full_name),
                          {'Fn::GetAtt': [ref_id, 'PublicIp']})
 
     def _render_user_data(self, content, kwargs):
@@ -111,3 +113,44 @@ class Instance(base.Builder):
                 data.append(part)
 
         return {'Fn::Base64': {'Fn::Join': ['', data]}}
+
+
+
+class SecurityGroup(base.Builder):
+
+    def __init__(self, config, name, stack, owner):
+        super(SecurityGroup, self).__init__(config, name)
+        self._owner = owner
+        self._name = name
+        self._stack = stack
+        self._add_security_group()
+        self._add_output('SecurityGroupId',
+                         'The physical ID for the security group',
+                         {'Ref': self.reference_id})
+
+    def _add_security_group(self):
+        if isinstance(self._config.settings.get('security-group'), str):
+            return self._config.settings.get('security-group')
+
+        desc = ('Security Group for the {0} '
+                'service in {1}').format(self._owner.capitalize(),
+                                         self._stack.environment.capitalize())
+        resource = ec2.SecurityGroup(self._name, desc, self._stack.vpc.id,
+                                     self._build_ingress_rules())
+        self._add_resource(self._name, resource)
+
+    def _build_ingress_rules(self):
+        rules = []
+        group = self._config.settings.get('security-group', {})
+        ingress_rules = list(group.get('ingress', {}))
+        for row in ingress_rules:
+            try:
+                port, source = dict(row).popitem()
+            except KeyError:
+                continue
+            protocol, from_port, to_port = utils.parse_port_value(port)
+            cidr_block = utils.find_in_map(source)
+            rules.append(ec2.SecurityGroupRule(protocol,
+                                               from_port, to_port,
+                                               cidr_block).as_dict())
+        return rules
