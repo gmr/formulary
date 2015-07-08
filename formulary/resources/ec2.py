@@ -163,7 +163,7 @@ class SecurityGroupIngress(base.Resource):
     tags = False
 
     def __init__(self, group_id, ip_protocol, from_port, to_port,
-                 source_security_group_id):
+                 cidr=None, source_security_group_id=None):
         super(SecurityGroupIngress,
               self).__init__('AWS::EC2::SecurityGroupIngress')
         self._properties['GroupId'] = group_id
@@ -171,6 +171,7 @@ class SecurityGroupIngress(base.Resource):
         self._properties['FromPort'] = from_port
         self._properties['ToPort'] = to_port
         self._properties['SourceSecurityGroupId'] = source_security_group_id
+        self._properties['CidrIp'] = cidr
 
 
 class SecurityGroupRule(base.Property):
