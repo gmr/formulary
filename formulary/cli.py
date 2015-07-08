@@ -9,6 +9,7 @@ import sys
 
 from formulary import controller
 from formulary import cloudformation
+from formulary import DEBUG_CONFIG
 from formulary import LOG_CONFIG
 
 DESCRIPTION = 'AWS Cloud Formation Stack Management'
@@ -22,6 +23,8 @@ class CLI(object):
     def run(self):
         args = self._parser.parse_args()
         if args.verbose:
+            logging.config.dictConfig(DEBUG_CONFIG)
+        else:
             logging.config.dictConfig(LOG_CONFIG)
         try:
             obj = controller.Controller(args.config_dir,

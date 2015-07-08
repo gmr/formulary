@@ -4,14 +4,14 @@ Formulary: Cloud-Formation Stack Management
 """
 __version__ = '0.2.0'
 
-LOG_CONFIG = {
+DEBUG_CONFIG = {
     'version': 1,
     'disable_existing_loggers': True,
     'incremental': False,
     'formatters': {
         'console': {
             'format': (
-                '%(levelname)-8s %(name) -24s: %(message)s'
+                '%(levelname)-8s %(name) -30s %(message)s'
             )
         },
     },
@@ -22,13 +22,43 @@ LOG_CONFIG = {
         },
     },
     'loggers': {
-        'boto': {
+        'boto3': {
             'handlers': ['console'],
             'level': 'WARNING',
         },
         'formulary': {
             'handlers': ['console'],
             'level': 'DEBUG',
+        }
+    }
+}
+
+
+LOG_CONFIG = {
+    'version': 1,
+    'disable_existing_loggers': True,
+    'incremental': False,
+    'formatters': {
+        'console': {
+            'format': (
+                '%(levelname)-8s %(module) -30s %(message)s'
+            )
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'console',
+        },
+    },
+    'loggers': {
+        'boto3': {
+            'handlers': ['console'],
+            'level': 'WARNING',
+        },
+        'formulary': {
+            'handlers': ['console'],
+            'level': 'WARNING',
         }
     }
 }
