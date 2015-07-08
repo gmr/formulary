@@ -57,12 +57,11 @@ class DHCPOptions(base.Resource):
         self._properties['NtpServers'] = ntp_servers
 
 
-
 class Instance(base.CPResource):
     """The AWS::EC2::Instance type creates an Amazon EC2 instance."""
     def __init__(self, name, ami, availability_zone, block_devices,
                  instance_type, subnet, security_group, user_data,
-                 private_ip=None, dependency=None, ebs=True):
+                 private_ip=None, ebs=True, dependency=None):
         super(Instance, self).__init__('AWS::EC2::Instance')
         self._name = name
         self._subnet = subnet
