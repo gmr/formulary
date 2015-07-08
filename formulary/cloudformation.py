@@ -62,6 +62,13 @@ class CloudFormation(object):
             raise RequestException(error)
 
         LOGGER.debug('Created stack ID: %r', result['StackId'])
+
+        # Upload stack details for removing completed stacks
+        stack_details = {'id': result['StackId'],
+                         'name': template.name,
+                         'environment': environment}
+        self._s3.upload('stack.json', json.dumps(stack_details))
+
         return result['StackId']
 
     def update_stack(self, template):
