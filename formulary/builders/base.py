@@ -34,7 +34,7 @@ class Builder(object):
         :param str|dict value: The value of the output
 
         """
-        self._add_output(name, description, value)
+        return self._add_output(name, description, value)
 
     def add_parameter(self, name, value):
         """Add a parameter that will be added to the template
@@ -43,7 +43,18 @@ class Builder(object):
         :param str|dict value: The value of the parameter
 
         """
-        self._add_parameter(name, value)
+        return self._add_parameter(name, value)
+
+    def add_resource(self, name, resource):
+        """Add a resource to the template, returning the cloud formation
+        template reference name for the resource.
+
+        :param str name: The underscore delimited resource name
+        :param Resource resource: The resource to add
+        :rtype: str
+
+        """
+        return self._add_resource(name, resource)
 
     @property
     def environment(self):
@@ -61,6 +72,8 @@ class Builder(object):
         :rtype: str
 
         """
+        if '-' in self.name:
+            return self.name
         return '-'.join([self._config.service, self.name])
 
     @property
