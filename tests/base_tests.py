@@ -8,7 +8,7 @@ try:
 except ImportError:
     import unittest
 
-from formulary import base
+from formulary.resources import base
 
 VPC_EXPECTATION = {
     'Type': 'AWS::EC2::VPC',
