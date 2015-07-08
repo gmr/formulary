@@ -49,7 +49,6 @@ class Stack(base.Builder):
 
                 dependency = self._maybe_camel_case(resource.get('dependency'))
                 handle = self._maybe_camel_case(resource.get('wait'))
-                parent = '{0}-{1}'.format(self._config.environment, self.name)
                 builder = service.Service(builder_cfg,
                                           resource['name'],
                                           self._amis,
@@ -57,7 +56,7 @@ class Stack(base.Builder):
                                           self._environment_stack,
                                           dependency,
                                           handle,
-                                          parent)
+                                          resource['name'])
 
                 self._outputs += builder.outputs
                 self._resources += builder.resources
