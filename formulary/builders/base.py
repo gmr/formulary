@@ -21,14 +21,24 @@ class Builder(object):
 
         """
         self._config = config
+        self._environment = config.environment
         self._name = name
         self._outputs = []
         self._parameters = []
         self._resources = []
         self._templates = []
 
+    def add_output(self, name, description, value):
+        """Add an output that will be added to the template
+
+        :param str name: The name of the output
+        :param str|dict value: The value of the output
+
+        """
+        self._add_output(name, description, value)
+
     def add_parameter(self, name, value):
-        """Add an parameter that will be added to the template
+        """Add a parameter that will be added to the template
 
         :param str name: The name of the parameter
         :param str|dict value: The value of the parameter
@@ -43,7 +53,16 @@ class Builder(object):
         :rtype: str
 
         """
-        return self._config.environment
+        return self._environment
+
+    @property
+    def full_name(self):
+        """Return the builder's full name
+
+        :rtype: str
+
+        """
+        return '-'.join([self.environment, self.name])
 
     @property
     def mappings(self):
@@ -82,6 +101,19 @@ class Builder(object):
         return self._parameters
 
     @property
+    def logical_id(self):
+        return self.name
+
+    @property
+    def reference_id(self):
+        """Return the camel case reference ID for the builder
+
+        :rtype: str
+
+        """
+        return utils.camel_case(self.name)
+
+    @property
     def resources(self):
         """Return the resource dictionary for the builder
 
@@ -97,9 +129,10 @@ class Builder(object):
         :rtype: str, str
 
         """
-        stack = template.Template(utils.camel_case(self.name))
-        stack.set_description('Formulary nested stack owned by '
-                              '{0}-{1}'.format(self.environment, owner))
+        stack = template.Template(self._name)
+        stack.set_description('Nested {0} stack owned by the '
+                              '{1}-{2} stack'.format(self.__class__.__name__,
+                                                     self.environment, owner))
         stack.update_mappings(self._config.mappings)
         stack.update_outputs(self.outputs)
         stack.update_parameters(self.parameters)
@@ -160,6 +193,10 @@ class Builder(object):
         if dependency:
             stack.set_dependency(dependency)
         self._add_resource(name, stack)
+
+    def _add_tag_to_resources(self, tag, value):
+        for (k, resource) in self._resources:
+            resource.add_tag(tag, value)
 
     def _maybe_replace_with_mapping(self, value):
         """If the value is a ^map macro, replace the with the value from the
