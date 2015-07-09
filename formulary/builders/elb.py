@@ -24,12 +24,14 @@ class LoadBalancer(base.Builder):
 
         """
         super(LoadBalancer, self).__init__(config, name)
+        internal = elb_config.get('internal')
         self._add_resource(self.name,
                            elb.LoadBalancer(self.name,
                                             [{'Ref': i} for i in instance_ids],
                                             self._health_check(elb_config),
                                             self._listeners(elb_config),
-                                            [{'Ref': security_group}], subnets))
+                                            [{'Ref': security_group}], subnets,
+                                            internal=internal))
         self._add_output('DNSName',
                          'The DNSName for {0}'.format(self.full_name),
                          {'Fn::GetAtt': [self.reference_id, 'DNSName']})
@@ -51,6 +53,7 @@ class LoadBalancer(base.Builder):
                   'instance_port': instance_port,
                   'instance_protocol': instance_protocol,
                   'ssl_certificate_id': config.get('ssl_certificate_id')}
+        print('kwargs', kwargs)
         for key, value in [(k, v) for k, v in kwargs.items()]:
             if value is None:
                 del kwargs[key]
