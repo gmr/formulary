@@ -160,9 +160,19 @@ class ResourceConfig(object):
         mappings = dict()
         mappings.update(self.load_file(self.base_path, 'mappings'))
         if not self._resource == 'environment':
-            mappings.update(self.environment_mappings())
+            self.merge(mappings, self.environment_mappings())
         mappings.update(self.load_file(self.resource_folder, 'mappings'))
         return mappings
+
+    def merge(self, a, b, key_path=None):
+        if key_path is None: key_path = []
+        for key in b:
+            if key in a:
+                if isinstance(a[key], dict) and isinstance(b[key], dict):
+                    self.merge(a[key], b[key], key_path + [str(key)])
+            else:
+                a[key] = b[key]
+        return a
 
     @staticmethod
     def _normalize_path(value): # pragma: no cover
