@@ -61,7 +61,8 @@ class LoadBalancer(base.Builder):
 
     @staticmethod
     def _health_check(config):
-        protocol = config.get('protocol', DEFAULT_PROTOCOL)
+        protocol = config.get('instance_protocol',
+                              config.get('protocol', DEFAULT_PROTOCOL))
         port = config.get('instance_port', config.get('port', DEFAULT_PORT))
         kwargs = {'interval': config.get('interval'),
                   'target': '{0}:{1}{2}'.format(protocol.upper(), port,
