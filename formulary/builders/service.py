@@ -40,7 +40,6 @@ class Service(base.Builder):
         self._security_group = self._add_security_group()
         self._maybe_add_security_group_ingress()
         self._add_instances()
-
         self._maybe_add_elbs()
         self._add_tag_to_resources('Environment', self._config.environment)
         self._add_tag_to_resources('Service', self._name)
@@ -78,7 +77,7 @@ class Service(base.Builder):
 
         template_id, url = builder.upload(self._name)
         self._add_stack(name, url, parameters)
-        self._maybe_add_route53_record(config, utils.camel_case(name))
+        self._maybe_add_route53_alias(config, utils.camel_case(name))
 
     def _add_instance(self, name, subnet, config,
                       wait_handle=None, dependency=None):
@@ -121,7 +120,7 @@ class Service(base.Builder):
             parameters[wait_handle] = {'Ref': wait_handle}
 
         # Add any SecurityGroupIngress resources for public-ingress support
-        for port in config.get('public-ingress'):
+        for port in config.get('public-ingress', []):
             protocol, from_port, to_port = utils.parse_port_value(port)
             cidr = {'Fn::Join': ['',
                                  [{'Fn::GetAtt': [utils.camel_case(name),
@@ -131,7 +130,7 @@ class Service(base.Builder):
                                                    protocol, from_port, to_port,
                                                    cidr)
             instance.add_resource('{0}-{1}-{2}'.format(self._name, protocol,
-                                                    to_port), resource)
+                                                       to_port), resource)
 
         template_id, url = instance.upload(self._name)
 
@@ -235,10 +234,22 @@ class Service(base.Builder):
         elif isinstance(self._config.settings['elb'], dict):
             self._add_elb('elb', self._config.settings['elb'])
 
-    def _maybe_add_route53_record(self, config, ref_name):
+    def _maybe_add_route53_record(self, config):
         if 'route53' not in config:
             return
-        name = '{0}-route53'.format(ref_name)
+        name = '{0}-route53'.format(config['route53']['hostname'])
+        builder = route53.Route53RecordSet(self._config, name,
+                                           config['route53'], self._instances)
+        template_id, url = builder.upload(self._name)
+        params = dict()
+        for instance in self._instances:
+            params[instance] = {'Ref': instance}
+        self._add_stack(name, url, params)
+
+    def _maybe_add_route53_alias(self, config, ref_name):
+        if 'route53' not in config:
+            return
+        name = '{0}-route53'.format(utils.dash_delimited(ref_name))
         builder = route53.Route53RecordSet(self._config, name,
                                            config['route53'])
         template_id, url = builder.upload(self._name)
