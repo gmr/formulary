@@ -27,7 +27,7 @@ class RDS(base.Builder):
     def _add_instance(self):
         subnets = self._add_subnet_groups()
         if not self._config.settings.get('multi-az'):
-            self._config['availability_zone'] = \
+            self._config.settings['availability_zone'] = \
                 self._stack.subnets[0].availability_zone
         name = '{0}-{1}'.format(self._config.environment, self._name)
         resource = rds.DBInstance(name,
@@ -42,7 +42,7 @@ class RDS(base.Builder):
         name = '{0}-security-group'.format(self._name)
         builder = ec2.SecurityGroup(self._config, name, self._stack,
                                     self._name)
-        self._resources.update(builder.resources)
+        self._resources += builder.resources
         return builder.reference_id
 
     def _add_subnet_groups(self):
