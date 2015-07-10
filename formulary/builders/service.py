@@ -62,6 +62,8 @@ class Service(base.Builder):
     def _add_elb(self, name, config):
         if self._parent:
             name = '{0}-{1}'.format(self._parent, name)
+        if '-' not in name:
+            name = '{0}-{1}'.format(self._config.service, name)
         builder = elb.LoadBalancer(self._config, name, self.name, config,
                                    self._instances, 'SecurityGroupId',
                                    self.subnet_ids)
