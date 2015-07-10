@@ -53,7 +53,6 @@ class LoadBalancer(base.Builder):
                   'instance_port': instance_port,
                   'instance_protocol': instance_protocol,
                   'ssl_certificate_id': config.get('ssl_certificate_id')}
-        print('kwargs', kwargs)
         for key, value in [(k, v) for k, v in kwargs.items()]:
             if value is None:
                 del kwargs[key]
