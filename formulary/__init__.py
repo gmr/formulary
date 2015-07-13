@@ -2,7 +2,7 @@
 Formulary: Cloud-Formation Stack Management
 
 """
-__version__ = '0.3.2'
+__version__ = '0.3.3'
 
 DEBUG_CONFIG = {
     'version': 1,
