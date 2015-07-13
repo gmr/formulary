@@ -32,6 +32,7 @@ class LoadBalancer(base.Builder):
                                             self._health_check(elb_config),
                                             self._listeners(elb_config),
                                             [{'Ref': security_group}], subnets,
+                                            cross_zone=True,
                                             internal=internal))
         self._add_output('DNSName',
                          'The DNSName for {0}'.format(self.full_name),
