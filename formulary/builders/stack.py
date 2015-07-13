@@ -7,6 +7,7 @@ import logging
 from formulary.builders import base
 from formulary.resources import cloudformation
 from formulary import config
+from formulary.builders import elasticache
 from formulary.builders import rds
 from formulary.builders import service
 from formulary import utils
@@ -57,6 +58,22 @@ class Stack(base.Builder):
                                           dependency,
                                           handle,
                                           resource['name'])
+
+                self._outputs += builder.outputs
+                self._resources += builder.resources
+
+            elif resource['type'] == 'elasticache':
+                LOGGER.debug('Add Elasticache: %r', resource['name'])
+                cfg_obj = config.ResourceConfig(self._base_path,
+                                                resource['type'],
+                                                resource['name'],
+                                                self._config.environment)
+                builder_cfg = self._get_builder_config(resource['name'],
+                                                       cfg_obj.load())
+
+                builder = elasticache.Cache(builder_cfg,
+                                            resource['name'],
+                                            self._environment_stack)
 
                 self._outputs += builder.outputs
                 self._resources += builder.resources

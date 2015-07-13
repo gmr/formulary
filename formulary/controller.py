@@ -8,6 +8,7 @@ import uuid
 
 from os import path
 
+from formulary.builders import elasticache
 from formulary.builders import environment
 from formulary.builders import rds
 from formulary.builders import service
@@ -69,10 +70,14 @@ class Controller(object):
 
     def execute(self):
         """Create or update a Cloud Formation stack"""
-        self._build_template_resources()
+        builder = self._build_template_resources()
 
         if self._config.get('description'):
             self._template.set_description(self._config['description'])
+
+        self._template.update_outputs(builder.outputs)
+        self._template.update_parameters(builder.parameters)
+        self._template.update_resources(builder.resources)
 
         template_value = self._template.as_json()
 
@@ -104,46 +109,25 @@ class Controller(object):
                                               self._region, self._s3_bucket,
                                               self._s3_prefix, self._profile)
         builder = environment.Environment(builder_config, self._resource)
-        self._template.update_outputs(builder.outputs)
-        self._template.update_parameters(builder.parameters)
-        self._template.update_resources(builder.resources)
+        return builder
 
-    def _build_rds_resources(self):
-        builder_config = self._get_builder_config()
+    def _build_elasticache_resources(self, builder_config):
+        return elasticache.Cache(builder_config, self._resource,
+                                 self._environment_stack)
 
-        if builder_config.settings.get('stack-only'):
-            self._error("The specified service is designated as stack-only.")
+    def _build_rds_resources(self, builder_config):
+        return rds.RDS(builder_config, self._resource, self._environment_stack)
 
-        builder = rds.RDS(builder_config, self._resource,
-                          self._environment_stack)
-        self._template.update_outputs(builder.outputs)
-        self._template.update_parameters(builder.parameters)
-        self._template.update_resources(builder.resources)
-
-    def _build_service_resources(self):
+    def _build_service_resources(self, builder_config):
         service_path = path.join(self._config_path,
                                  self._config_obj.resource_folder)
-        builder_config = self._get_builder_config()
+        return service.Service(builder_config, self._resource, self._amis,
+                               service_path, self._environment_stack)
 
-        if builder_config.settings.get('stack-only'):
-            self._error("The specified service is designated as stack-only.")
-
-        builder = service.Service(builder_config,
-                                  self._resource, self._amis,
-                                  service_path, self._environment_stack)
-        self._template.update_outputs(builder.outputs)
-        self._template.update_parameters(builder.parameters)
-        self._template.update_resources(builder.resources)
-        return builder
-
-    def _build_stack_resources(self):
-        builder = stack.Stack(self._get_builder_config(),
-                              self._resource, self._config_obj.base_path,
-                              self._amis, self._environment_stack)
-        self._template.update_outputs(builder.outputs)
-        self._template.update_parameters(builder.parameters)
-        self._template.update_resources(builder.resources)
-        return builder
+    def _build_stack_resources(self, builder_config):
+        return stack.Stack(builder_config, self._resource,
+                           self._config_obj.base_path, self._amis,
+                           self._environment_stack)
 
     def _build_template_resources(self):
         self._template.update_mappings(self._mappings)
@@ -152,12 +136,18 @@ class Controller(object):
 
         self._template.update_mappings(self._environment_stack.mappings)
 
-        if self._resource_type == 'rds':
-            return self._build_rds_resources()
+        builder_config = self._get_builder_config()
+        if builder_config.settings.get('stack-only'):
+            self._error("The specified service is designated as stack-only.")
+
+        if self._resource_type == 'elasticache':
+            return self._build_elasticache_resources(builder_config)
+        elif self._resource_type == 'rds':
+            return self._build_rds_resources(builder_config)
         elif self._resource_type == 'service':
-            return self._build_service_resources()
+            return self._build_service_resources(builder_config)
         elif self._resource_type == 'stack':
-            return self._build_stack_resources()
+            return self._build_stack_resources(builder_config)
 
     def _get_builder_config(self):
         return config.BuilderConfig(self._config, self._mappings,
