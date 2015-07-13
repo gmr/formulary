@@ -65,7 +65,7 @@ class HeathCheck(base.Property):
 
     """
     def __init__(self, interval=30, target='HTTP:80', timeout=5,
-                 healthy=10, unhealthy=2):
+                 healthy=2, unhealthy=2):
         super(HeathCheck, self).__init__()
         self._values = {'HealthyThreshold': healthy,
                         'Interval': interval,

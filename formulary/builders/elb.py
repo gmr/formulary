@@ -23,6 +23,7 @@ class LoadBalancer(base.Builder):
         :param list subnets: List of subnet ids
 
         """
+        name = '{0}-{1}'.format(config.environment, name)
         super(LoadBalancer, self).__init__(config, name)
         internal = elb_config.get('internal')
         self._add_resource(self.name,
