@@ -81,6 +81,12 @@ class Instance(base.Builder):
         self._add_output('PublicIP',
                          'Public IP address for {0}'.format(self.full_name),
                          {'Fn::GetAtt': [ref_id, 'PublicIp']})
+        self._add_output('PrivateDnsName',
+                         'Private DNS for {0}'.format(self.full_name),
+                         {'Fn::GetAtt': [ref_id, 'PrivateDnsName']})
+        self._add_output('PublicDnsName',
+                         'Public DNS for {0}'.format(self.full_name),
+                         {'Fn::GetAtt': [ref_id, 'PublicDnsName']})
 
     def _render_user_data(self, content, kwargs):
         for match in USER_DATA_RE.finditer(content):
