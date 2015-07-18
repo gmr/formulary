@@ -26,7 +26,8 @@ class Route53RecordSet(base.Builder):
         self._add_resource('route53-{0}-a'.format(settings['hostname']),
                            route53.Route53RecordSet(settings['domain_name'],
                                                     settings['hostname'], None,
-                                                    alias.as_dict(), 'A'))
+                                                    alias.as_dict(), 'A',
+                                                    settings.get('ttl')))
 
     def _add_instance_rr(self, settings, instances):
         for instance in instances:
@@ -35,7 +36,8 @@ class Route53RecordSet(base.Builder):
         self._add_resource('route53-{0}-a'.format(settings['hostname']),
                            route53.Route53RecordSet(settings['domain_name'],
                                                     settings['hostname'],
-                                                    resources, None, 'A'))
+                                                    resources, None, 'A',
+                                                    settings.get('ttl')))
 
     def _add_instance_srv(self, settings, instances):
         for instance in instances:
@@ -53,4 +55,5 @@ class Route53RecordSet(base.Builder):
         self._add_resource('route53-{0}-srv'.format(settings['hostname']),
                            route53.Route53RecordSet(settings['domain_name'],
                                                     hostname,
-                                                    resources, None, 'SRV'))
+                                                    resources, None, 'SRV',
+                                                    settings.get('ttl')))
