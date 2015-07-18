@@ -25,7 +25,8 @@ DEFAULT_BLOCK_DEVICES = {'/dev/xvda': DEFAULT_BLOCK_DEVICE}
 class Service(base.Builder):
 
     def __init__(self, config, name, amis, local_path, environment_stack,
-                 dependency=None, wait_handle=None, parent=None):
+                 dependency=None, wait_handle=None, parent=None,
+                 users=None):
         super(Service, self).__init__(config, name)
 
         self._amis = amis
@@ -37,10 +38,13 @@ class Service(base.Builder):
         self._wait_handle = wait_handle
         self._environment_stack = environment_stack
         self._parent = parent
+        self._users = users
+
         self._security_group = self._add_security_group()
         self._maybe_add_security_group_ingress()
         self._add_instances()
         self._maybe_add_elbs()
+        self._maybe_add_route53_record_set()
         self._add_tag_to_resources('Environment', self._config.environment)
         self._add_tag_to_resources('Service', self._name)
 
@@ -262,6 +266,20 @@ class Service(base.Builder):
 
         self._add_stack(name, url, params)
 
+    def _maybe_add_route53_record_set(self):
+        if 'route53' not in self._config.settings:
+            return
+        config = self._config.settings['route53']
+        name = '{0}-route53'.format(utils.dash_delimited(config['hostname']))
+        builder = route53.Route53RecordSet(self._config, name, config,
+                                           self._instances)
+        template_id, url = builder.upload(self._name)
+        params = dict()
+        for instance in self._instances:
+            params[instance] = {'Fn::GetAtt': [instance,
+                                               'Outputs.PrivateDnsName']}
+        self._add_stack(name, url, params)
+
     def _maybe_add_security_group_ingress(self):
         LOGGER.debug('Possibly adding security group ingress rules')
         name = 'security-group-ingress'
@@ -312,7 +330,10 @@ class Service(base.Builder):
         if self._config.settings.get('user-data'):
             with open(path.join(self._local_path,
                                 self._config.settings['user-data'])) as handle:
-                return handle.read()
+                content = handle.read()
+            if self._config.settings.get('include-users'):
+                content += self._users
+            return content
 
     @property
     def subnet_ids(self):

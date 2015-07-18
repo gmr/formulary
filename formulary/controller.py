@@ -122,12 +122,14 @@ class Controller(object):
         service_path = path.join(self._config_path,
                                  self._config_obj.resource_folder)
         return service.Service(builder_config, self._resource, self._amis,
-                               service_path, self._environment_stack)
+                               service_path, self._environment_stack,
+                               users=self._get_user_cloud_config())
 
     def _build_stack_resources(self, builder_config):
         return stack.Stack(builder_config, self._resource,
                            self._config_obj.base_path, self._amis,
-                           self._environment_stack)
+                           self._environment_stack,
+                           users=self._get_user_cloud_config())
 
     def _build_template_resources(self):
         self._template.update_mappings(self._mappings)
@@ -175,6 +177,18 @@ class Controller(object):
                                                self._environment_config,
                                                None, self._profile)
 
+    def _get_user_cloud_config(self):
+        """Return the opaque string that is appended to the bottom
+        of user-data strings if ``include_users`` is true.
+
+        :rtype: str
+
+        """
+        file_path = path.join(self._config_path, 'users.yaml')
+        if path.exists(file_path):
+            with open(file_path, 'r') as handle:
+                return handle.read()
+
     @property
     def _region(self):
         """Return the region value from the environment config,
@@ -192,7 +206,7 @@ class Controller(object):
         :rtype: str
 
         """
-        if self._environment:
+        if self._environment and self._resource_type != 'environment':
             return '{0}-{1}-{2}'.format(self._environment, self._resource_type,
                                         self._resource)
         return self._resource

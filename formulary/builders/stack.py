@@ -17,7 +17,7 @@ LOGGER = logging.getLogger(__name__)
 
 class Stack(base.Builder):
 
-    def __init__(self, config, name, base_path, amis, environment_stack):
+    def __init__(self, config, name, base_path, amis, environment_stack, users):
         super(Stack, self).__init__(config, name)
         self._amis = amis
         self._base_path = base_path
@@ -25,6 +25,7 @@ class Stack(base.Builder):
         self._mappings = config.mappings
         self._mappings.update(environment_stack.mappings)
         self._environment_stack = environment_stack
+        self._users = users
         self._process_resources()
 
     def _get_builder_config(self, resource, config_values):
@@ -57,7 +58,8 @@ class Stack(base.Builder):
                                           self._environment_stack,
                                           dependency,
                                           handle,
-                                          resource['name'])
+                                          resource['name'],
+                                          users=self._users)
 
                 self._outputs += builder.outputs
                 self._resources += builder.resources
