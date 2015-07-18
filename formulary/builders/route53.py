@@ -10,11 +10,14 @@ class Route53RecordSet(base.Builder):
 
     def __init__(self, config, name, settings, instances=None):
         super(Route53RecordSet, self).__init__(config, name)
-        self._add_parameter('DNSName', {'Type': 'String'})
-        self._add_parameter('HostedZoneId', {'Type': 'String'})
         if instances:
-            self._add_instance_rr(settings, instances)
+            if 'srv' in settings:
+                self._add_instance_srv(settings, instances)
+            else:
+                self._add_instance_rr(settings, instances)
         else:
+            self._add_parameter('DNSName', {'Type': 'String'})
+            self._add_parameter('HostedZoneId', {'Type': 'String'})
             self._add_alias_record(settings)
 
     def _add_alias_record(self, settings):
@@ -33,3 +36,21 @@ class Route53RecordSet(base.Builder):
                            route53.Route53RecordSet(settings['domain_name'],
                                                     settings['hostname'],
                                                     resources, None, 'A'))
+
+    def _add_instance_srv(self, settings, instances):
+        for instance in instances:
+            self._add_parameter(instance, {'Type': 'String'})
+        resources = []
+        srv = settings['srv']
+        for ref_id in instances:
+            resources.append({'Fn::Join': ['',
+                                           [str(srv.get('priority', '0')), ' ',
+                                            str(srv.get('weight', '0')), ' ',
+                                            str(srv.get('port', '80')), ' ',
+                                            {'Ref': ref_id}, '.']]})
+        hostname = '_{0}._{1}'.format(settings['hostname'],
+                                      srv.get('protocol', 'tcp'))
+        self._add_resource('route53-{0}-srv'.format(settings['hostname']),
+                           route53.Route53RecordSet(settings['domain_name'],
+                                                    hostname,
+                                                    resources, None, 'SRV'))
