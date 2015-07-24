@@ -44,7 +44,7 @@ class Service(base.Builder):
         self._maybe_add_security_group_ingress()
         self._add_instances()
         self._maybe_add_elbs()
-        self._maybe_add_route53_record_set()
+        self._maybe_add_route53_record_sets()
         self._add_tag_to_resources('Environment', self._config.environment)
         self._add_tag_to_resources('Service', self._name)
 
@@ -110,7 +110,8 @@ class Service(base.Builder):
                                 self._read_user_data(),
                                 self._tags,
                                 config.get('ebs', True),
-                                self._parent or self._environment_stack.name)
+                                self._parent or self._environment_stack.name,
+                                metadata=self._get_render_metadata())
 
         instance.add_parameter('SecurityGroupId',
                                {'Type': 'String',
@@ -214,6 +215,9 @@ class Service(base.Builder):
         LOGGER.debug('Block devices: %r', values)
         return values
 
+    def _get_render_metadata(self):
+        return {'count': str(self._config.settings.get('instance-count', 1))}
+
     def _get_subnet(self, availability_zone):
         for subnet in self._get_subnets(len(self._environment_stack.subnets)):
             if subnet.availability_zone == availability_zone:
@@ -240,9 +244,18 @@ class Service(base.Builder):
         elif isinstance(self._config.settings['elb'], dict):
             self._add_elb('elb', self._config.settings['elb'])
 
-    def _maybe_add_route53_record(self, config):
+    """
+    def _maybe_add_route53_records(self, config):
         if 'route53' not in config:
             return
+        if isinstance(config, dict):
+            return self._maybe_add_route53_record(config)
+        elif isinstance(config, list):
+            for entry in config['route53']:
+                self._maybe_add_route53_record(entry)
+
+    def _maybe_add_route53_record(self, config):
+
         name = '{0}-route53'.format(config['route53']['hostname'])
         builder = route53.Route53RecordSet(self._config, name,
                                            config['route53'], self._instances)
@@ -251,6 +264,7 @@ class Service(base.Builder):
         for instance in self._instances:
             params[instance] = {'Ref': instance}
         self._add_stack(name, url, params)
+    """
 
     def _maybe_add_route53_alias(self, config, ref_name):
         if 'route53' not in config:
@@ -266,18 +280,29 @@ class Service(base.Builder):
 
         self._add_stack(name, url, params)
 
-    def _maybe_add_route53_record_set(self):
+    def _maybe_add_route53_record_sets(self):
         if 'route53' not in self._config.settings:
             return
         config = self._config.settings['route53']
+        if isinstance(config, dict):
+            return self._maybe_add_route53_record_set(config)
+        elif isinstance(config, list):
+            for entry in config:
+                self._maybe_add_route53_record_set(entry)
+
+    def _maybe_add_route53_record_set(self, config):
         name = '{0}-route53'.format(utils.dash_delimited(config['hostname']))
         builder = route53.Route53RecordSet(self._config, name, config,
                                            self._instances)
         template_id, url = builder.upload(self._name)
         params = dict()
         for instance in self._instances:
-            params[instance] = {'Fn::GetAtt': [instance,
-                                               'Outputs.PrivateDnsName']}
+            if 'srv' in config:
+                params[instance] = {'Fn::GetAtt': [instance,
+                                                   'Outputs.PrivateDnsName']}
+            else:
+                params[instance] = {'Fn::GetAtt': [instance,
+                                                   'Outputs.PrivateIP']}
         self._add_stack(name, url, params)
 
     def _maybe_add_security_group_ingress(self):
