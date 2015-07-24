@@ -23,7 +23,7 @@ class Instance(base.Builder):
 
     def __init__(self, config, name, ami, block_devices, instance_type,
                  private_ip, security_group, subnet, user_data, tags,
-                 ebs=True, stack_name=None, dependency=None):
+                 ebs=True, stack_name=None, dependency=None, metadata=None):
         """Create a new EC2 instance builder
 
         :param formulary.builders.config.Config: builder configuration
@@ -60,7 +60,14 @@ class Instance(base.Builder):
                   'stack': stack_name,
                   'ebs': ebs}
 
+        if metadata:
+            kwargs.update(metadata)
+
         kwargs['user_data'] = self._render_user_data(user_data, kwargs)
+
+        if metadata:
+            for key in metadata:
+                del kwargs[key]
 
         # Remove the kwargs that don't get passed to ec2.Instance
         for key in ['environment', 'ref_id', 'region', 'service', 'stack']:
