@@ -20,7 +20,7 @@ classifiers = ['Development Status :: 3 - Alpha',
                'Topic :: System :: Systems Administration']
 
 setuptools.setup(name='formulary',
-                 version='0.3.5',
+                 version='0.3.6',
                  description='Easy management of AWS Cloud Formation stacks',
                  long_description=open('README.rst').read(),
                  author='Gavin M. Roy',

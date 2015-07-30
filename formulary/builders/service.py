@@ -244,28 +244,6 @@ class Service(base.Builder):
         elif isinstance(self._config.settings['elb'], dict):
             self._add_elb('elb', self._config.settings['elb'])
 
-    """
-    def _maybe_add_route53_records(self, config):
-        if 'route53' not in config:
-            return
-        if isinstance(config, dict):
-            return self._maybe_add_route53_record(config)
-        elif isinstance(config, list):
-            for entry in config['route53']:
-                self._maybe_add_route53_record(entry)
-
-    def _maybe_add_route53_record(self, config):
-
-        name = '{0}-route53'.format(config['route53']['hostname'])
-        builder = route53.Route53RecordSet(self._config, name,
-                                           config['route53'], self._instances)
-        template_id, url = builder.upload(self._name)
-        params = dict()
-        for instance in self._instances:
-            params[instance] = {'Ref': instance}
-        self._add_stack(name, url, params)
-    """
-
     def _maybe_add_route53_alias(self, config, ref_name):
         if 'route53' not in config:
             return
@@ -297,12 +275,15 @@ class Service(base.Builder):
         template_id, url = builder.upload(self._name)
         params = dict()
         for instance in self._instances:
+            priv = 'Public' if config.get('pubic') else 'Private'
             if 'srv' in config:
-                params[instance] = {'Fn::GetAtt': [instance,
-                                                   'Outputs.PrivateDnsName']}
+                params[instance] = {'Fn::GetAtt':
+                                        [instance,
+                                         'Outputs.{0}DnsName'.format(priv)]}
             else:
-                params[instance] = {'Fn::GetAtt': [instance,
-                                                   'Outputs.PrivateIP']}
+                params[instance] = {'Fn::GetAtt':
+                                        [instance,
+                                         'Outputs.{0}IP'.format(priv)]}
         self._add_stack(name, url, params)
 
     def _maybe_add_security_group_ingress(self):
