@@ -93,14 +93,14 @@ class Controller(object):
                 stack_id = self._cloud_formation.create_stack(self._template,
                                                               env,
                                                               service_name)
-                print('Stack {0} created'.format(stack_id))
+                print('Stack {0} creation submitted'.format(stack_id))
             except cloudformation.RequestException as error:
                 self._error(str(error))
 
         elif self._action == 'update':
             try:
                 self._cloud_formation.update_stack(self._template)
-                print('Stack updated')
+                print('Stack update submitted')
             except cloudformation.RequestException as error:
                 self._error(str(error))
 
