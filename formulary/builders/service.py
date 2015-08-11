@@ -226,7 +226,7 @@ class Service(base.Builder):
     def _get_subnets(self, count):
         subnets = self._environment_stack.subnets
         if count > len(subnets):
-            subnets *= math.ceil(count / float(len(subnets)))
+            subnets *= int(math.ceil(count / float(len(subnets))))
         return subnets[0:count]
 
     def _maybe_add_availability_zone(self, config):
