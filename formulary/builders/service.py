@@ -8,6 +8,7 @@ import random
 
 from formulary.builders import base
 
+from formulary.builders import autoscaling
 from formulary.resources import cloudformation
 from formulary.builders import ec2
 from formulary.resources import ec2 as ec2_resources
@@ -30,6 +31,7 @@ class Service(base.Builder):
         super(Service, self).__init__(config, name)
 
         self._amis = amis
+        self._elbs = []
         self._instances = []
         self._local_path = local_path
         self._mappings = config.mappings
@@ -43,7 +45,8 @@ class Service(base.Builder):
         self._security_group = self._add_security_group()
         self._maybe_add_security_group_ingress()
         self._add_instances()
-        self._maybe_add_elbs()
+        #if not self._elbs:
+        #    self._maybe_add_elbs()
         self._maybe_add_route53_record_sets()
         self._add_tag_to_resources('Environment', self._config.environment)
         self._add_tag_to_resources('Service', self._name)
@@ -60,6 +63,48 @@ class Service(base.Builder):
                                         settings, handle, wait)
             if not wait:
                 wait = self._maybe_add_wait_condition(index, handle, ref_id)
+
+    def _add_autoscaling_group(self, config):
+        LOGGER.debug('Adding autoscaling group')
+        self._maybe_add_elbs()
+        name = '{0}-{1}'.format(self._parent,
+                                self._name) if self._parent else self._name
+        launch_config = self._add_launch_config(config)
+        availability_zones, subnets = [], []
+        for subnet in self._environment_stack.subnets:
+            availability_zones.append(subnet.availability_zone)
+            subnets.append(subnet.id)
+
+        elbs = ['{0}-{1}'.format(self.environment, elb_name)
+                for elb_name in self._elbs]
+        settings = config.get('autoscaling', {})
+        health = settings.get('health_check', {})
+        tags = []
+        for key in self._tags:
+            tags.append({'Key': key,
+                         'Value': self._tags[key],
+                         'PropagateAtLaunch': 'true'})
+
+        as_group = autoscaling.AutoScalingGroup(self._config, name,
+                                                availability_zones,
+                                                str(settings.get('cooldown')),
+                                                health.get('grace_period'),
+                                                health.get('type'),
+                                                None,
+                                                {'Ref': 'LaunchConfig'},
+                                                elbs or None,
+                                                str(settings.get('min')),
+                                                str(settings.get('max')),
+                                                tags=tags,
+                                                vpc_zones=subnets)
+
+        as_group.add_parameter('LaunchConfig', {'Type': 'String'})
+        params = {'LaunchConfig':
+                      {'Fn::GetAtt': [launch_config, 'Outputs.LaunchConfig']}}
+
+        template_id, url = as_group.upload(self._name)
+        self._add_stack(name, url, params)
+        return utils.camel_case(name)
 
     # Add same-az instances in a method matching auto-balanced ones
 
@@ -83,7 +128,9 @@ class Service(base.Builder):
 
         template_id, url = builder.upload(self._name)
         self._add_stack(name, url, parameters)
-        self._maybe_add_route53_alias(config, utils.camel_case(name))
+        ref_name = utils.camel_case(name)
+        self._maybe_add_route53_alias(config, ref_name)
+        self._elbs.append(name)
 
     def _add_instance(self, name, subnet, config,
                       wait_handle=None, dependency=None):
@@ -149,6 +196,7 @@ class Service(base.Builder):
 
     def _add_instances(self):
         settings = self._config.settings
+        strategy = settings.get('instance-strategy')
         if 'instances' in settings:
             LOGGER.debug('Adding instances')
             for name, instance_cfg in settings['instances'].items():
@@ -161,17 +209,61 @@ class Service(base.Builder):
                 self._add_instance(name,
                                    self._get_subnet(cfg['availability_zone']),
                                    cfg)
-        elif settings.get('instance-strategy') == 'same-az':
+        elif strategy == 'same-az':
             self._maybe_add_availability_zone(settings)
             subnet = self._get_subnet(settings['availability_zone'])
             for index in range(0, settings.get('instance-count', 1)):
                 self._add_instance('instance{0}'.format(index),
                                    subnet, settings)
-        elif settings.get('instance-strategy') == 'az-balanced':
+        elif strategy == 'az-balanced':
             return self._add_autobalanced_instances(settings)
-        elif 'instance-strategy' in settings:
+
+        elif strategy == 'autoscaling':
+            return self._add_autoscaling_group(self._config.settings)
+        elif strategy:
             raise ValueError('Unknown instance-strategy: '
                              '{0}'.format(settings['instance-strategy']))
+
+    def _add_launch_config(self, config):
+        LOGGER.debug('Adding launch configuration')
+        name = 'launch-config-{0}'.format(self._name)
+        if self._parent:
+            name = '{0}-{1}'.format(self._parent, name)
+        stack_name = self._parent or self._environment_stack.name
+        key_pair = self._config.mappings.get('AWS',
+                                             {}).get('KeyName',
+                                                     {}).get('Value')
+        lc = autoscaling.LaunchConfiguration(self._config,
+                                             name,
+                                             self._get_ami_id(),
+                                             None,
+                                             config.get('instance-type'),
+                                             key_pair,
+                                             config.get('public-ips', True),
+                                             {'Ref': 'SecurityGroupId'},
+                                             self._read_user_data(),
+                                             config.get('ebs'),
+                                             self._get_render_metadata(),
+                                             config.get('monitoring'),
+                                             stack_name)
+
+        lc.add_parameter('SecurityGroupId',
+                              {'Type': 'String',
+                               'Description': 'Security Group Physical ID'})
+
+        parameters = {'SecurityGroupId':
+                          {'Fn::GetAtt': [self._security_group,
+                                          'Outputs.SecurityGroupId']}}
+
+        template_id, url = lc.upload(self._name)
+        self._add_stack(name, url, parameters)
+        return utils.camel_case(name)
+
+    def _add_scaling_policy(self, settings):
+        name = 'sp-{0}'.format(self._name)
+        if self._parent:
+            name = '{0}-{1}'.format(self._parent, name)
+        # spolicy = autoscaling.ScalingPolicy(self._config, name,)
 
     def _add_security_group(self):
         LOGGER.debug('Adding security group')
