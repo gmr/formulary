@@ -19,7 +19,58 @@ USER_DATA_JSON = re.compile(r'(\{\"(?:Ref|Fn\::\w+)\"[\s\:]+'
                             r'(?:\".*?\"|\[.*?\])\})')
 
 
-class Instance(base.Builder):
+class InstanceBuilder(base.Builder):
+
+    def __init__(self, config, name):
+        """Create a new EC2 instance builder
+
+        :param formulary.builders.config.Config: builder configuration
+        :param str name:
+
+        """
+        super(InstanceBuilder, self).__init__(config, name)
+        self._s3 = s3.S3(config.s3_bucket, config.s3_prefix, config.profile)
+
+    def _render_user_data(self, content, kwargs):
+        for match in USER_DATA_RE.finditer(content):
+            if match.group(1) == 'map':
+                value = self._config.mappings
+                for key in str(match.group(2)).split('.'):
+                    try:
+                        value = value.get(key.strip())
+                    except AttributeError:
+                        LOGGER.warning('Error assigning user-data value '
+                                       'to "%s", value does not exist', key)
+                content = content.replace(match.group(0), value)
+            elif match.group(1) == 'instance':
+                content = content.replace(match.group(0),
+                                          kwargs[match.group(2)])
+            elif match.group(1) == 's3file':
+                value = self._s3.fetch(str(match.group(2)))
+                content = content.replace(match.group(0), value)
+
+        data = []
+        for line in content.split('\n'):
+            matches = USER_DATA_JSON.findall(line)
+            if not matches:
+                data.append(line + '\n')
+                continue
+
+            parts = USER_DATA_JSON.split(line)
+            for offset, part in enumerate(parts):
+                if part in matches:
+                    parts[offset] = json.loads(part)
+            if isinstance(parts[-1], dict):
+                parts.append('\n')
+            else:
+                parts[-1] += '\n'
+            for part in parts:
+                data.append(part)
+
+        return {'Fn::Base64': {'Fn::Join': ['', data]}}
+
+
+class Instance(InstanceBuilder):
 
     def __init__(self, config, name, ami, block_devices, instance_type,
                  private_ip, security_group, subnet, user_data, tags,
@@ -94,45 +145,6 @@ class Instance(base.Builder):
         self._add_output('PublicDnsName',
                          'Public DNS for {0}'.format(self.full_name),
                          {'Fn::GetAtt': [ref_id, 'PublicDnsName']})
-
-    def _render_user_data(self, content, kwargs):
-        for match in USER_DATA_RE.finditer(content):
-            if match.group(1) == 'map':
-                value = self._config.mappings
-                for key in str(match.group(2)).split('.'):
-                    try:
-                        value = value.get(key.strip())
-                    except AttributeError:
-                        LOGGER.warning('Error assigning user-data value '
-                                       'to "%s", value does not exist', key)
-                content = content.replace(match.group(0), value)
-            elif match.group(1) == 'instance':
-                content = content.replace(match.group(0),
-                                          kwargs[match.group(2)])
-            elif match.group(1) == 's3file':
-                value = self._s3.fetch(str(match.group(2)))
-                content = content.replace(match.group(0), value)
-
-        data = []
-        for line in content.split('\n'):
-            matches = USER_DATA_JSON.findall(line)
-            if not matches:
-                data.append(line + '\n')
-                continue
-
-            parts = USER_DATA_JSON.split(line)
-            for offset, part in enumerate(parts):
-                if part in matches:
-                    parts[offset] = json.loads(part)
-            if isinstance(parts[-1], dict):
-                parts.append('\n')
-            else:
-                parts[-1] += '\n'
-            for part in parts:
-                data.append(part)
-
-        return {'Fn::Base64': {'Fn::Join': ['', data]}}
-
 
 
 class SecurityGroup(base.Builder):
