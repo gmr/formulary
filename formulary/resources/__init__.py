@@ -1,4 +1,0 @@
-"""
-Cloud Formation Resources
-
-"""

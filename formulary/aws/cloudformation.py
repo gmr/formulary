@@ -2,19 +2,18 @@
 Cloud Formation methods and interfaces
 
 """
-import collections
 import json
 import logging
-import uuid
 
+import collections
 from boto3 import session
 from botocore import exceptions
-
 from formulary import records
-from formulary import s3
+from formulary.aws import s3
 from formulary import utils
 
 LOGGER = logging.getLogger(__name__)
+
 MAX_TEMPLATE_SIZE = 51200
 
 StackResource = collections.namedtuple('StackResource',
@@ -28,8 +27,9 @@ class CloudFormation(object):
         """Estimate the cost of the stack in EC2
 
         :param str region: The region name to create the stack in
-        :param str bucket: The bucket to use for large templates
         :param str profile: The credentials profile to use
+        :param str s3bucket_name: The bucket to use for large templates
+        :param str s3bucket_path: The path to use in the bucket
 
         """
         self._s3 = s3.S3(s3bucket_name, s3bucket_path, profile)
@@ -38,55 +38,95 @@ class CloudFormation(object):
                                         region_name=region)
         self._client = self._session.client('cloudformation')
 
-    def create_stack(self, template, environment, service=None):
+    def create_stack(self, stack):
         """Create a stack in the specified region with the given template,
         returning the stack id.
 
-        :param Template template: The template to use
-        :param str environment: The environment to set in a stack tag
-        :param str|None service: The service name to set in a stack tag
+        :param formulary.stacks.Base stack: The stack to create
         :rtype: str
 
         """
-        template_id = str(uuid.uuid4())
-        url = self._s3.upload(template_id, template.as_json())
-        tags = [{'Key': 'Environment', 'Value': environment}]
-        if service:
-            tags.append({'Key': 'Service', 'Value': service})
+        kwargs = self._build_kwargs(stack)
         try:
-            result = self._client.create_stack(StackName=template.name,
-                                               Tags=tags,
-                                               TemplateURL=url)
+            result = self._client.create_stack(**kwargs)
         except exceptions.ClientError as error:
-            self._s3.delete(template_id)
+            self._maybe_delete_stack_template(kwargs, stack)
             raise RequestException(error)
-
-        LOGGER.debug('Created stack ID: %r', result['StackId'])
-
-        # Upload stack details for removing completed stacks
-        stack_details = {'id': result['StackId'],
-                         'name': template.name,
-                         'environment': environment}
-        self._s3.upload('stack.json', json.dumps(stack_details))
-
+        self._maybe_upload_stack_manifest(result['StackId'], stack)
+        LOGGER.info('Stack creation submitted for %s: %s',
+                    stack.name, result['StackId'])
         return result['StackId']
 
-    def update_stack(self, template):
+    def delete_stack(self, stack):
+        try:
+            self._client.delete_stack(StackName=stack.name)
+        except exceptions.ClientError as error:
+            raise RequestException(error)
+        LOGGER.info('Stack delete submitted for %s', stack.name)
+
+    def update_stack(self, stack):
         """Update a stack in the specified region with the given template.
 
-        :param Template template: The template to use
+        :param formulary.stacks.Base stack: The stack to update
         :raises: RequestException
 
         """
-        template_id = str(uuid.uuid4())
-        url = self._s3.upload(template_id, template.as_json())
+        kwargs = self._build_kwargs(stack)
         try:
-            result = self._client.update_stack(StackName=template.name,
-                                               TemplateURL=url)
+            result = self._client.update_stack(**kwargs)
         except exceptions.ClientError as error:
-            self._s3.delete(template_id)
+            self._maybe_delete_stack_template(kwargs, stack)
             raise RequestException(error)
-        LOGGER.debug('Updated stack ID: %r', result['StackId'])
+        LOGGER.info('Stack update submitted for %s: %s',
+                    stack.name, result['StackId'])
+
+    def _build_kwargs(self, stack):
+        kwargs = {'StackName': stack.name}
+        template_value = stack.to_json()
+        if len(template_value) > MAX_TEMPLATE_SIZE:
+            kwargs['TemplateURL'] = self._s3.upload(stack.id,
+                                                    template_value)
+        else:
+            kwargs['TemplateBody'] = template_value
+        kwargs['Tags'] = [{'Key': 'VPC', 'Value': stack.vpc}]
+        if stack.service:
+            kwargs['Tags'].append({'Key': 'Service', 'Value': stack.service})
+        return kwargs
+
+    @staticmethod
+    def _has_child_stack(stack):
+        """Checks a stack to see if there are any child stacks
+
+        :rtype: bool
+
+        """
+        for name in stack.resources:
+            if stack.resources[name].resource_type == \
+                    'AWS::CloudFormation::Stack':
+                return True
+        return False
+
+    def _maybe_delete_stack_template(self, kwargs, stack):
+        if 'TemplateURL' in kwargs:
+            LOGGER.debug('Deleting stack template')
+            self._s3.delete(stack.id)
+
+    def _maybe_upload_stack_manifest(self, stack_id, stack):
+        """Create a manifest file that can be used to delete stale stack
+        template directories.
+
+        :param str stack_id: The stack ID for the manifest
+        :param formulary.stacks.Base stack: The stack to check
+
+        """
+        if not self._has_child_stack(stack):
+            LOGGER.debug('No child stacks found')
+            return
+        stack_details = {'id': stack_id,
+                         'name': stack.name,
+                         'vpc': stack.vpc}
+        self._s3.upload('stack.json', json.dumps(stack_details))
+        LOGGER.debug('Created stack manifest file')
 
 
 class _API(object):
@@ -118,7 +158,7 @@ class _API(object):
         return self._ec2
 
 
-class EnvironmentStack(object):
+class VPCStack(object):
 
     def __init__(self, name, config, template=None, profile=None):
         self._config = config
@@ -146,15 +186,6 @@ class EnvironmentStack(object):
         return self.vpc.cidr_block
 
     @property
-    def environment(self):
-        """Return the environment from the Stack's tags
-
-        :rtype: str
-
-        """
-        return self.vpc.tags.get('Environment', self._name)
-
-    @property
     def mappings(self):
         """Return mappings based upon values in the stack used for service
         configuration and user-data templates.
@@ -166,11 +197,11 @@ class EnvironmentStack(object):
         for key, value in self.vpc._asdict().items():
             if key == 'tags':
                 continue
-            cckey = utils.camel_case(key)
+            cc_key = utils.camel_case(key)
             if key == 'cidr_block':
-                cckey = 'CIDR'
+                cc_key = 'CIDR'
             if value is not None:
-                vpc_data[cckey] = value
+                vpc_data[cc_key] = value
         return {
             'Network': {
                 'Name': {'Value': self._name},
@@ -232,8 +263,7 @@ class EnvironmentStack(object):
                 self._create_subnet_route_table_association,
             'AWS::EC2::VPC': self._create_vpc_tuple,
             'AWS::EC2::VPCGatewayAttachment':
-                self._create_gateway_association_tuple
-        }
+                self._create_gateway_association_tuple}
 
     def _create_dhcp_options_tuple(self, value):
         """Create the DHCPOptions tuple from the retrieved stack resource
@@ -567,7 +597,6 @@ class EnvironmentStack(object):
         values = json.loads(template.as_json())
         self._description = values['Description']
         # @TODO add resource tuples
-
 
 
 class RequestException(Exception):
