@@ -14,6 +14,7 @@ class Stack(object):
     template.
 
     """
+
     def __init__(self, config, name, vpc):
         """Create a new instance of the Stack
 
@@ -111,4 +112,3 @@ class Stack(object):
 
         """
         self._template.add_resource(resource)
-

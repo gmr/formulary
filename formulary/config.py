@@ -14,11 +14,13 @@ from formulary import aws
 
 LOGGER = logging.getLogger(__name__)
 
-CONFIG_FOLDERS = {'elasticache': 'elasticaches',
-                  'rds': 'rds',
-                  'service': 'services',
-                  'stack': 'stacks',
-                  'vpc': 'vpcs'}
+CONFIG_FOLDERS = {
+    'elasticache': 'elasticaches',
+    'rds': 'rds',
+    'service': 'services',
+    'stack': 'stacks',
+    'vpc': 'vpcs'
+}
 
 EXTENSIONS = ['json', 'yml', 'yaml']
 
@@ -176,7 +178,6 @@ VPC_SCHEMA = '''
 
 
 class Resource(object):
-
     def __init__(self, base_path, resource_type, resource, vpc):
         self.base_path = self._normalize_path(base_path)
         self.vpc = vpc
@@ -327,8 +328,8 @@ class Resource(object):
 
         """
         paths_found = [path.exists(config_path)]
-        paths_found += [path.exists(path.join(config_path, f)) for f in
-                        CONFIG_FOLDERS.values()]
+        paths_found += [path.exists(path.join(config_path, f))
+                        for f in CONFIG_FOLDERS.values()]
         return any(paths_found)
 
     def validate_vpc(self, env):
@@ -381,8 +382,8 @@ class Resource(object):
 
 
 class Stack(object):
-
     """Configuration class for Stack objects"""
+
     def __init__(self, base_path, resource_type, resource_name, vpc,
                  aws_profile=None):
         """Create a new instance of a Stack configuration obj
@@ -411,5 +412,3 @@ class Stack(object):
 
         """
         return [s.id for s in self._vpc_stack.subnets]
-
-

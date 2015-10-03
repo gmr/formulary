@@ -16,7 +16,6 @@ DEFAULT_DNS_HOSTNAMES = True
 DEFAULT_DNS_SUPPORT = True
 DEFAULT_NAME_SERVERS = ['AmazonProvidedDNS']
 DEFAULT_TENANCY = 'default'
-
 PUBLIC_CIDR = '0.0.0.0/0'
 
 
@@ -25,6 +24,7 @@ class VPC(base.Stack):
     gateway, routing, subnets, and ACLs
 
     """
+
     def __init__(self, config, name):
         super(VPC, self).__init__(config, name, name)
         self._template.description = config.get('description',
@@ -128,8 +128,8 @@ class VPC(base.Stack):
         """Iterate through the ACL entries and add them"""
         acl_ref = troposphere.Ref(acl)
         for index, value in enumerate(self._config.get('network-acls', [])):
-            (protocol, from_port, to_port) = \
-                utils.parse_port_value(value['ports'], -1)
+            (protocol, from_port,
+             to_port) = utils.parse_port_value(value['ports'], -1)
             title = '{}{}'.format(acl, index)
             entry = ec2.NetworkAclEntry(title)
             entry.CidrBlock = value['cidr']
@@ -150,7 +150,8 @@ class VPC(base.Stack):
     def _add_outputs(self):
         """Create output for the template with the VPC Id"""
         description = 'VPC Id for {}'.format(self.ref)
-        output = troposphere.Output('VpcId', Description=description,
+        output = troposphere.Output('VpcId',
+                                    Description=description,
                                     Value=self.ref)
         self._add_output(output)
 

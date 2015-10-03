@@ -16,8 +16,8 @@ LOGGER = logging.getLogger(__name__)
 
 MAX_TEMPLATE_SIZE = 51200
 
-StackResource = collections.namedtuple('StackResource',
-                                       ('id', 'type', 'name', 'status'))
+StackResource = collections.namedtuple('StackResource', ('id', 'type', 'name',
+                                                         'status'))
 
 
 class CloudFormation(object):
@@ -53,8 +53,8 @@ class CloudFormation(object):
             self._maybe_delete_stack_template(kwargs, stack)
             raise RequestException(error)
         self._maybe_upload_stack_manifest(result['StackId'], stack)
-        LOGGER.info('Stack creation submitted for %s: %s',
-                    stack.name, result['StackId'])
+        LOGGER.info('Stack creation submitted for %s: %s', stack.name,
+                    result['StackId'])
         return result['StackId']
 
     def delete_stack(self, stack):
@@ -77,15 +77,14 @@ class CloudFormation(object):
         except exceptions.ClientError as error:
             self._maybe_delete_stack_template(kwargs, stack)
             raise RequestException(error)
-        LOGGER.info('Stack update submitted for %s: %s',
-                    stack.name, result['StackId'])
+        LOGGER.info('Stack update submitted for %s: %s', stack.name,
+                    result['StackId'])
 
     def _build_kwargs(self, stack):
         kwargs = {'StackName': stack.name}
         template_value = stack.to_json()
         if len(template_value) > MAX_TEMPLATE_SIZE:
-            kwargs['TemplateURL'] = self._s3.upload(stack.id,
-                                                    template_value)
+            kwargs['TemplateURL'] = self._s3.upload(stack.id, template_value)
         else:
             kwargs['TemplateBody'] = template_value
         kwargs['Tags'] = [{'Key': 'VPC', 'Value': stack.vpc}]
@@ -101,8 +100,7 @@ class CloudFormation(object):
 
         """
         for name in stack.resources:
-            if stack.resources[name].resource_type == \
-                    'AWS::CloudFormation::Stack':
+            if stack.resources[name].resource_type == 'AWS::CloudFormation::Stack':
                 return True
         return False
 
@@ -122,15 +120,12 @@ class CloudFormation(object):
         if not self._has_child_stack(stack):
             LOGGER.debug('No child stacks found')
             return
-        stack_details = {'id': stack_id,
-                         'name': stack.name,
-                         'vpc': stack.vpc}
+        stack_details = {'id': stack_id, 'name': stack.name, 'vpc': stack.vpc}
         self._s3.upload('stack.json', json.dumps(stack_details))
         LOGGER.debug('Created stack manifest file')
 
 
 class _API(object):
-
     def __init__(self, region, profile):
         kwargs = {'profile_name': profile} if profile else {}
         LOGGER.debug('Connecting with profile: %r', kwargs)
@@ -159,7 +154,6 @@ class _API(object):
 
 
 class VPCStack(object):
-
     def __init__(self, name, config, template=None, profile=None):
         self._config = config
         self._name = name
@@ -251,19 +245,19 @@ class VPCStack(object):
     def _build_api_create_function_map(self):
         return {
             'AWS::EC2::DHCPOptions': self._create_dhcp_options_tuple,
-            'AWS::EC2::VPCDHCPOptionsAssociation':
-                self._create_dhcp_options_assoc_tuple,
+            'AWS::EC2::VPCDHCPOptionsAssociation': self.
+            _create_dhcp_options_assoc_tuple,
             'AWS::EC2::InternetGateway': self._create_internet_gateway_tuple,
             'AWS::EC2::NetworkAcl': self._create_network_acl_tuple,
             'AWS::EC2::NetworkAclEntry': self._create_network_acl_tuple_entry,
             'AWS::EC2::Route': self._create_route_tuple,
             'AWS::EC2::RouteTable': self._create_route_table_tuple,
             'AWS::EC2::Subnet': self._create_subnet_tuple,
-            'AWS::EC2::SubnetRouteTableAssociation':
-                self._create_subnet_route_table_association,
+            'AWS::EC2::SubnetRouteTableAssociation': self.
+            _create_subnet_route_table_association,
             'AWS::EC2::VPC': self._create_vpc_tuple,
-            'AWS::EC2::VPCGatewayAttachment':
-                self._create_gateway_association_tuple}
+            'AWS::EC2::VPCGatewayAttachment': self._create_gateway_association_tuple
+        }
 
     def _create_dhcp_options_tuple(self, value):
         """Create the DHCPOptions tuple from the retrieved stack resource
@@ -278,14 +272,11 @@ class VPCStack(object):
         cfg = dict()
         for cfg_value in record.dhcp_configurations:
             cfg[cfg_value['Key']] = cfg_value['Values']
-        return records.DHCPOptions(value['PhysicalResourceId'],
-                                   value['LogicalResourceId'],
-                                   value['Timestamp'].isoformat(),
-                                   value['ResourceStatus'],
-                                   cfg['domain-name'][0],
-                                   cfg['domain-name-servers'][0],
-                                   cfg['ntp-servers'][0],
-                                   record.tags)
+        return records.DHCPOptions(
+            value['PhysicalResourceId'], value['LogicalResourceId'],
+            value['Timestamp'].isoformat(), value['ResourceStatus'],
+            cfg['domain-name'][0], cfg['domain-name-servers'][0],
+            cfg['ntp-servers'][0], record.tags)
 
     @staticmethod
     def _create_dhcp_options_assoc_tuple(value):
@@ -348,20 +339,15 @@ class VPCStack(object):
             if entry.get('PortRange'):
                 from_port = entry['PortRange'].Get('From')
                 to_port = entry['PortRange'].Get('To')
-            acl_entry = records.NetworkACLEntry(None, None, None,
-                                                int(entry['RuleNumber']),
-                                                entry['CidrBlock'],
-                                                bool(entry['Egress']),
-                                                entry['RuleAction'],
-                                                int(entry['Protocol']),
+            acl_entry = records.NetworkACLEntry(None, None, None, int(
+                entry['RuleNumber']), entry['CidrBlock'], bool(
+                entry['Egress']), entry['RuleAction'], int(entry['Protocol']),
                                                 from_port, to_port)
             entries.append(acl_entry)
-        return records.NetworkACL(value['PhysicalResourceId'],
-                                  value['LogicalResourceId'],
-                                  value['Timestamp'].isoformat(),
-                                  value['ResourceStatus'],
-                                  entries,
-                                  acl_data.tags)
+        return records.NetworkACL(
+            value['PhysicalResourceId'], value['LogicalResourceId'],
+            value['Timestamp'].isoformat(), value['ResourceStatus'], entries,
+            acl_data.tags)
 
     @staticmethod
     def _create_network_acl_tuple_entry(value):
@@ -375,8 +361,8 @@ class VPCStack(object):
         """
         return records.NetworkACLEntry(value['PhysicalResourceId'],
                                        value['Timestamp'].isoformat(),
-                                       value['ResourceStatus'],
-                                       None, None, None, None, None, None, None)
+                                       value['ResourceStatus'], None, None,
+                                       None, None, None, None, None)
 
     @staticmethod
     def _create_route_tuple(value):
@@ -404,12 +390,10 @@ class VPCStack(object):
         """
         data = self._describe_route_table(value['PhysicalResourceId'])
         associations = [d.subnet_id for d in data.associations.all()]
-        return records.RouteTable(value['PhysicalResourceId'],
-                                  value['LogicalResourceId'],
-                                  value['Timestamp'].isoformat(),
-                                  value['ResourceStatus'],
-                                  associations,
-                                  data.tags)
+        return records.RouteTable(
+            value['PhysicalResourceId'], value['LogicalResourceId'],
+            value['Timestamp'].isoformat(), value['ResourceStatus'],
+            associations, data.tags)
 
     def _create_subnet_tuple(self, value):
         """Create the Subnet tuple from the retrieved stack resource
@@ -424,10 +408,8 @@ class VPCStack(object):
         return records.Subnet(value['PhysicalResourceId'],
                               value['LogicalResourceId'],
                               value['Timestamp'].isoformat(),
-                              value['ResourceStatus'],
-                              data.availability_zone,
-                              data.cidr_block,
-                              data.available_ip_address_count)
+                              value['ResourceStatus'], data.availability_zone,
+                              data.cidr_block, data.available_ip_address_count)
 
     @staticmethod
     def _create_subnet_route_table_association(value):
@@ -439,11 +421,9 @@ class VPCStack(object):
         :rtype: formulary.records.SubnetRouteTableAssociation
 
         """
-        return \
-            records.SubnetRouteTableAssociation(value['PhysicalResourceId'],
-                                                value['LogicalResourceId'],
-                                                value['Timestamp'].isoformat(),
-                                                value['ResourceStatus'])
+        return records.SubnetRouteTableAssociation(
+            value['PhysicalResourceId'], value['LogicalResourceId'],
+            value['Timestamp'].isoformat(), value['ResourceStatus'])
 
     def _create_vpc_tuple(self, value):
         """Create the VPC tuple from the retrieved stack resource information
@@ -459,14 +439,11 @@ class VPCStack(object):
             tags[tag['Key']] = tag['Value']
         return records.VPC(value['PhysicalResourceId'],
                            value['LogicalResourceId'],
-                           value['Timestamp'].isoformat(),
-                           vpc.state if vpc else None,
-                           None,
-                           vpc.cidr_block if vpc else None,
-                           vpc.is_default if vpc else None,
-                           vpc.instance_tenancy if vpc else None,
-                           vpc.dhcp_options_id if vpc else None,
-                           tags)
+                           value['Timestamp'].isoformat(), vpc.state
+                           if vpc else None, None, vpc.cidr_block
+                           if vpc else None, vpc.is_default
+                           if vpc else None, vpc.instance_tenancy if vpc else
+                           None, vpc.dhcp_options_id if vpc else None, tags)
 
     def _describe_dhcp_options(self, dhcp_id):
         """Get the data from AWS about the specified DHCP options

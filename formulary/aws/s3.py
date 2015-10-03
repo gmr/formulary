@@ -60,8 +60,9 @@ class S3(object):
 
         """
         key = self._key(file_name)
-        expiration = (datetime.datetime.utcnow() +
-                      datetime.timedelta(seconds=TTL)).isoformat()
+        expiration = (
+            datetime.datetime.utcnow() + datetime.timedelta(seconds=TTL)
+        ).isoformat()
         try:
             self._client.put_object(ACL='authenticated-read',
                                     Body=content,
@@ -76,7 +77,9 @@ class S3(object):
             raise error
         LOGGER.debug('Uploaded %s (%i bytes)', file_name, len(content))
         return self._client.generate_presigned_url(
-            'get_object', Params={'Bucket': self._bucket_name, 'Key': key})
+            'get_object',
+            Params={'Bucket': self._bucket_name,
+                    'Key': key})
 
     def _create_bucket(self):
         self._client.create_bucket(Bucket=self._bucket_name)

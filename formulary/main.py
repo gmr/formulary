@@ -18,7 +18,8 @@ class CloudFormation(object):
     """Perform CloudFormation stack management"""
 
     def __init__(self, aws_profile, config_path, resource_type, resource_name,
-                 dry_run, vpc_name=None):
+                 dry_run,
+                 vpc_name=None):
         """Create a new instance of the CloudFormation stack manager
 
         :param str aws_profile: The name of the AWS credentials profile to use
@@ -70,7 +71,8 @@ class CloudFormation(object):
         stack = self._get_stack()
         if self._dry_run:
             LOGGER.info('Formulary Update Stack Dry-Run Output:\n')
-            return print(stack.to_json(2))
+            print(stack.to_json(2))
+            return
         cloudformation = self._cloudformation(stack)
         cloudformation.update_stack(stack)
 
@@ -89,10 +91,14 @@ class CloudFormation(object):
         :rtype: formulary.aws.CloudFormation
 
         """
-        return aws.CloudFormation(self._aws_profile,
-                                  self.region,
-                                  self._vpc_config['s3bucket'],
-                                  stack.id)
+        return aws.CloudFormation(self._aws_profile, self.region,
+                                  self._vpc_config['s3bucket'], stack.id)
+
+    def _get_service_stack(self):
+        return stacks.Service(config.Stack(self._config_path, 'service',
+                                           self._resource_name, self._vpc_name,
+                                           self._aws_profile),
+                              self._resource_name, self._vpc_name)
 
     def _get_stack(self):
         if self._resource_type == 'service':
@@ -101,13 +107,6 @@ class CloudFormation(object):
             return self._get_vpc_stack()
 
         raise NotImplementedError
-
-    def _get_service_stack(self):
-        return stacks.Service(config.Stack(self._config_path, 'service',
-                                           self._resource_name,
-                                           self._aws_profile),
-                              self._resource_name,
-                              self._vpc_name)
 
     def _get_vpc_stack(self):
         if not self._config.validate_vpc(self._resource_name):

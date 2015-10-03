@@ -9,31 +9,15 @@ LOG_WARNING = {
     'disable_existing_loggers': True,
     'incremental': False,
     'formatters': {
-        'console': {
-            'format': (
-                '%(levelname)-8s %(module) -30s %(message)s'
-            )
-        },
+        'console': {'format': ('%(levelname)-8s %(module) -30s %(message)s')},
     },
     'handlers': {
-        'console': {
-            'class': 'logging.StreamHandler',
-            'formatter': 'console',
-        },
+        'console': {'class': 'logging.StreamHandler', 'formatter': 'console'},
     },
     'loggers': {
-        'boto3': {
-            'handlers': ['console'],
-            'level': 'WARNING',
-        },
-        'formulary': {
-            'handlers': ['console'],
-            'level': 'WARNING',
-        },
-        'troposphere': {
-            'handlers': ['console'],
-            'level': 'WARNING'
-        }
+        'boto3': {'handlers': ['console'],'level': 'WARNING'},
+        'formulary': {'handlers': ['console'], 'level': 'WARNING'},
+        'troposphere': {'handlers': ['console'], 'level': 'WARNING'}
     }
 }
 

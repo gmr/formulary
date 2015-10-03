@@ -68,8 +68,8 @@ def parse_port_value(value, default_protocol=None):
             from_port, from_protocol = from_port.split('/')
         if '/' in to_port:
             to_port, to_protocol = to_port.split('/')
-        protocol = (from_protocol or to_protocol or
-                    default_protocol or DEFAULT_PROTOCOL)
+        protocol = (from_protocol or to_protocol or default_protocol or
+                    DEFAULT_PROTOCOL)
 
     elif '/' in value:
         port, protocol = value.split('/')
