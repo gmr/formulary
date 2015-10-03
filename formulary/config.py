@@ -14,7 +14,6 @@ from formulary import aws
 
 LOGGER = logging.getLogger(__name__)
 
-
 CONFIG_FOLDERS = {'elasticache': 'elasticaches',
                   'rds': 'rds',
                   'service': 'services',
@@ -30,21 +29,11 @@ VPC_SCHEMA = '''
     "type": "object",
     "properties": {
         "cidr": {
-            "title": "CIDR",
-            "description": "The CIDR block you want the VPC to cover",
             "type": "string",
-            "pattern": "^([0-9]{1,3}\\\\.){3}[0-9]{1,3}/[0-9]{1,2}$",
-            "default": "192.168.0.0/16"
+            "pattern": "^([0-9]{1,3}\\\\.){3}[0-9]{1,3}/[0-9]{1,2}$"
         },
-        "description": {
-            "title": "Description",
-            "description": "A description of the VPC used in CloudFormation comments",
-            "type": "string",
-            "default": "Formulary created VPC"
-        },
+        "description": {"type": "string"},
         "region": {
-            "title": "AWS Region",
-            "description": "The AWS region for the VPC",
             "type": "string",
             "enum": [
                 "us-east-1",
@@ -56,92 +45,44 @@ VPC_SCHEMA = '''
                 "ap-southeast-2",
                 "ap-northeast-1",
                 "sa-east-1"
-            ],
-            "default": "us-east-1"
+            ]
         },
-        "s3bucket": {
-            "title": "S3 Bucket",
-            "description": "The S3 bucket to upload CloudFormation templates for",
-            "type": "string"
-        },
-        "dns-support": {
-            "title": "DNS Support",
-            "description": "Specifies whether DNS resolution is supported for the VPC",
-            "type": "boolean",
-            "default": true
-        },
-        "dns-hostnames": {
-            "title": "DNS Hostnames",
-            "description": "Specifies whether the instances launched in the VPC get DNS hostnames",
-            "type": "boolean",
-            "default": false
-        },
+        "s3bucket": {"type": "string"},
+        "dns-support": {"type": "boolean"},
+        "dns-hostnames": {"type": "boolean"},
         "tenancy": {
-            "title": "Instance Tenancy",
-            "description": "The allowed tenancy of instances launched into the VPC",
             "type": "string",
             "enum": [
                 "default",
                 "dedicated"
-            ],
-            "default": "default"
+            ]
         },
         "dhcp-options": {
-            "title": "DHCP Options",
-            "description": " DHCP options for your VPC",
             "type": "object",
             "properties": {
-                "domain-name": {
-                    "title": "Domain Name",
-                    "description": "The domain name for hosts in the VPC",
-                    "type": "string",
-                    "pattern": "^(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\\\\-]*[a-zA-Z0-9])\\\\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\\\\-]*[A-Za-z0-9])$"
-                },
+                "domain-name": {"type": "string"},
                 "name-servers": {
-                    "title": "DomainNameServers",
-                    "description": "The IP (IPv4) address of up to four domain name servers",
                     "type": "array",
-                    "items": [
-                        {
-                            "type": "string"
-                        }
-                    ],
+                    "items": [{"type": "string"}],
                     "minItems": 1,
                     "maxItems": 4,
-                    "uniqueItems": true,
-                    "default": [
-                        "AmazonProvidedDNS"
-                    ]
+                    "uniqueItems": true
                 },
                 "netbios-name-servers": {
-                    "title": "NetbiosNameServers",
-                    "description": "The IP address (IPv4) of up to four NetBIOS name servers",
                     "type": "array",
-                    "items": [
-                        {
-                            "type": "string"
-                        }
-                    ],
+                    "items": [{"type": "string"}],
                     "minItems": 1,
                     "maxItems": 4,
                     "uniqueItems": true
                 },
                 "netbios-node-type": {
-                    "title": "NetbiosNodeType",
-                    "description": "An integer value indicating the NetBIOS node type",
                     "type": "integer",
                     "enum": [1, 2, 4, 8]
 
                 },
                 "ntp-servers": {
-                    "title": "Ntp Servers",
-                    "description": "The IP address (IPv4) of up to four Network Time Protocol (NTP) servers",
                     "type": "array",
-                    "items": [
-                        {
-                            "type": "string"
-                        }
-                    ],
+                    "items": [{"type": "string"}],
                     "minItems": 1,
                     "maxItems": 4,
                     "uniqueItems": true
@@ -153,24 +94,14 @@ VPC_SCHEMA = '''
             ]
         },
         "network-acls": {
-            "title": "Network ACLs",
-            "description": "An array of network ACLs for the VPC",
             "type": "array",
-            "items": [
-                {
-                    "$ref": "#/definitions/network-acl-entry"
-                }
-            ],
+            "items": [{"$ref": "#/definitions/network-acl-entry"}],
             "minItems": 1
         },
         "subnets": {
-            "title": "Subnets",
-            "description": "Subnets of the VPC by availability zone",
             "type": "object",
             "patternProperties": {
-                "^[a-zA-Z]$": {
-                    "$ref": "#/definitions/subnet"
-                }
+                "^[a-zA-Z]$": {"$ref": "#/definitions/subnet"}
             }
         }
     },
@@ -181,48 +112,33 @@ VPC_SCHEMA = '''
     "additionalProperties": false,
     "definitions": {
         "network-acl-entry": {
-            "title": "Network ACL Entry",
-            "description": "An entry in the network ACLs for the VPC",
             "type": "object",
             "properties": {
                 "cidr": {
-                    "title": "CIDR",
-                    "description": "The CIDR block for the ACL rule",
                     "type": "string",
                     "pattern": "^([0-9]{1,3}\\\\.){3}[0-9]{1,3}/[0-9]{1,2}$",
                     "default": "0.0.0.0/0"
                 },
                 "egress": {
                     "title": "Egress",
-                    "description": "Whether this rule applies to egress traffic from the subnet (true) or ingress traffic to the subnet (false)",
                     "type": "boolean"
                 },
                 "protocol": {
                     "title": "IP Protocol",
-                    "description": "The IP protocol that the rule applies to",
                     "type": "integer",
                     "default": -1,
                     "minimum": -1,
                     "maximum": 255
                 },
                 "action": {
-                    "title": "Rule Action",
-                    "description": "Whether to allow or deny traffic that matches the rule",
                     "type": "string",
-                    "enum": [
-                        "allow",
-                        "deny"
-                    ]
+                    "enum": ["allow", "deny"]
                 },
                 "number": {
-                    "title": "Rule Number",
-                    "description": "Rule number to assign to the entry (e.g., 100)",
                     "type": "integer",
                     "default": 1
                 },
                 "ports": {
-                    "title": "Ports",
-                    "description": "The range of ports for the UDP/TCP protocol",
                     "type": "string",
                     "default": "0-65535",
                     "pattern": "^[0-9]{1,5}-[0-9]{1,5}$"
@@ -239,18 +155,10 @@ VPC_SCHEMA = '''
             ]
         },
         "subnet": {
-            "title": "Subnet",
-            "description": "Creates a subnet in an existing VPC",
             "type": "object",
             "properties": {
-                "availability-zone": {
-                    "title": "Availability Zone",
-                    "description": "The availability zone for the subnet",
-                    "type": "string"
-                },
+                "availability-zone": {"type": "string"},
                 "cidr": {
-                    "title": "CIDR",
-                    "description": "The CIDR block of the subnet",
                     "type": "string",
                     "pattern": "^([0-9]{1,3}\\\\.){3}[0-9]{1,3}/[0-9]{1,2}$",
                     "default": "0.0.0.0/0"
