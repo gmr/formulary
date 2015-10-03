@@ -47,7 +47,8 @@ class CloudFormation(object):
         stack = self._get_stack()
         if self._dry_run:
             LOGGER.info('Formulary Create Stack Dry-Run Output:\n')
-            return print(stack.to_json(2))
+            print(stack.to_json(2))
+            return
 
         cloudformation = self._cloudformation(stack)
         try:
