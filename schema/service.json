@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "id": "http://jsonschema.net",
+  "type": "object",
+  "properties": {
+    "description": {
+      "title": "Service description",
+      "description": "Service description as displayed in CloudFormation",
+      "type": "string"
+    },
+    "ami": {},
+    "block-devices": {},
+    "elb": {},
+    "instance": {},
+    "security-group": {},
+    "stack-only": {
+      "title": "Stack Only",
+      "description": "Indicates the service should only be built as part of a stack",
+      "type": "boolean",
+      "default": false
+    },
+    "user-data": {}
+  }
+}

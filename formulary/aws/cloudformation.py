@@ -32,6 +32,11 @@ class CloudFormation(object):
         :param str s3bucket_path: The path to use in the bucket
 
         """
+        LOGGER.info('Cloudformation Profile: %s', profile)
+        LOGGER.debug('Cloudformation Region: %s', region)
+        LOGGER.debug('Cloudformation s3 Bucket: %s%s',
+                     s3bucket_name, s3bucket_path)
+
         self._s3 = s3.S3(s3bucket_name, s3bucket_path, profile)
 
         self._session = session.Session(profile_name=profile,
@@ -155,6 +160,8 @@ class _API(object):
 
 class VPCStack(object):
     def __init__(self, name, config, template=None, profile=None):
+        LOGGER.info('Creating VPCStack %s using the %s profile',
+                    name, profile)
         self._config = config
         self._name = name
         self._profile = profile
@@ -490,7 +497,7 @@ class VPCStack(object):
         :rtype: dict
 
         """
-        LOGGER.debug('Fetching data for %s', self._name)
+        LOGGER.info('Fetching data for %s', self._name)
         try:
             response = self._api.cf.describe_stacks(StackName=self._name)
         except exceptions.ClientError as error:

@@ -6,6 +6,7 @@ import logging
 import uuid
 
 from formulary import aws
+from formulary.aws import cloudformation
 from formulary import config
 from formulary import stacks
 
@@ -18,8 +19,7 @@ class CloudFormation(object):
     """Perform CloudFormation stack management"""
 
     def __init__(self, aws_profile, config_path, resource_type, resource_name,
-                 dry_run,
-                 vpc_name=None):
+                 dry_run, vpc_name=None):
         """Create a new instance of the CloudFormation stack manager
 
         :param str aws_profile: The name of the AWS credentials profile to use
@@ -32,6 +32,9 @@ class CloudFormation(object):
         """
         if resource_type == 'vpc' and vpc_name:
             raise FormularyException('Do not specify vpc with vpc type')
+        elif resource_type != 'vpc' and not vpc_name:
+            message = 'You must specify a VPC for the {}'.format(resource_type)
+            raise FormularyException(message)
 
         self._aws_profile = aws_profile
         self._config_path = config_path
@@ -45,15 +48,19 @@ class CloudFormation(object):
         self._vpc_config = self._config.vpc_config()
 
     def create_stack(self):
-        stack = self._get_stack()
+        try:
+            stack = self._get_stack()
+        except cloudformation.RequestException as error:
+            raise FormularyException(error)
+
         if self._dry_run:
             LOGGER.info('Formulary Create Stack Dry-Run Output:\n')
             print(stack.to_json(2))
             return
 
-        cloudformation = self._cloudformation(stack)
+        cf = self._cloudformation(stack)
         try:
-            stack_id = cloudformation.create_stack(stack)
+            stack_id = cf.create_stack(stack)
         except Exception as error:
             raise FormularyException(error)
 
@@ -64,8 +71,8 @@ class CloudFormation(object):
         if self._dry_run:
             LOGGER.info('Formulary Delete Stack Dry-Run Complete\n')
             return
-        cloudformation = self._cloudformation(stack)
-        cloudformation.delete_stack(stack)
+        cf = self._cloudformation(stack)
+        cf.delete_stack(stack)
 
     def update_stack(self):
         stack = self._get_stack()
@@ -73,8 +80,8 @@ class CloudFormation(object):
             LOGGER.info('Formulary Update Stack Dry-Run Output:\n')
             print(stack.to_json(2))
             return
-        cloudformation = self._cloudformation(stack)
-        cloudformation.update_stack(stack)
+        cf = self._cloudformation(stack)
+        cf.update_stack(stack)
 
     @property
     def region(self):
@@ -95,8 +102,11 @@ class CloudFormation(object):
                                   self._vpc_config['s3bucket'], stack.id)
 
     def _get_service_stack(self):
-        return stacks.Service(config.Stack(self._config_path, 'service',
-                                           self._resource_name, self._vpc_name,
+        return stacks.Service(config.Stack(self._config_path,
+                                           self._config,
+                                           'service',
+                                           self._resource_name,
+                                           self._vpc_name,
                                            self._aws_profile),
                               self._resource_name, self._vpc_name)
 

@@ -178,13 +178,16 @@ VPC_SCHEMA = '''
 
 
 class Resource(object):
+
     def __init__(self, base_path, resource_type, resource, vpc):
-        self.base_path = self._normalize_path(base_path)
-        self.vpc = vpc
+        LOGGER.info('Creating %s resource for %s in %s',
+                    resource_type, resource, vpc)
+        self.base_path = self.normalize_path(base_path)
         self._resource = resource
         self._resource_type = resource_type
+        self._vpc = vpc
 
-    def _flatten_config(self, cfg):
+    def flatten_config(self, cfg):
         """Take a given config dictionary and if it contains vpc
         specific values, map the vpc values to the associated
         top level keys.
@@ -196,15 +199,15 @@ class Resource(object):
         output = {}
         for key, value in cfg.items():
             if isinstance(value, dict):
-                if self.vpc in value.keys():
-                    output[key] = value[self.vpc]
+                if self._vpc in value.keys():
+                    output[key] = value[self._vpc]
                 else:
-                    output[key] = self._flatten_config(value)
+                    output[key] = self.flatten_config(value)
             elif isinstance(value, list):
                 output[key] = []
                 for list_value in value:
                     if isinstance(list_value, dict):
-                        output[key].append(self._flatten_config(list_value))
+                        output[key].append(self.flatten_config(list_value))
                     else:
                         output[key].append(list_value)
             else:
@@ -233,10 +236,12 @@ class Resource(object):
 
         """
         if self._resource_type in ['vpc', 'service']:
-            settings = self.load_file(self.resource_folder, self._resource_type)
+            settings = self.load_file(self.resource_folder,
+                                      self._resource_type)
         else:
             settings = self.load_file(self.resource_folder, self._resource)
-        return self._flatten_config(settings)
+
+        return self.flatten_config(settings)
 
     def load_file(self, folder, file):
         """Return the contents of the specified configuration file in the
@@ -279,13 +284,23 @@ class Resource(object):
         """
         mappings = dict()
         mappings.update(self.load_file(self.base_path, 'mappings'))
-        if not self._resource == 'vpc':
-            self.merge(mappings, self.vpc_mappings())
+        if not self._resource_type == 'vpc':
+            mappings = self.merge(mappings, self.vpc_mappings())
         mappings.update(self.load_file(self.resource_folder, 'mappings'))
         return mappings
 
     def merge(self, a, b, key_path=None):
-        if key_path is None: key_path = []
+        """Merge two dictionaries recursively, overwriting values from
+        dict ``a`` with values from dict ``b`` where appropriate.
+
+        :param dict a: The first dict
+        :param dict b: The second dict
+        param str key_path: The path of keys when called recursively
+        :rtype: dict
+
+        """
+        if key_path is None:
+            key_path = []
         for key in b:
             if key in a:
                 if isinstance(a[key], dict) and isinstance(b[key], dict):
@@ -295,7 +310,7 @@ class Resource(object):
         return a
 
     @staticmethod
-    def _normalize_path(value): # pragma: no cover
+    def normalize_path(value):  # pragma: no cover
         """Normalize the specified path value returning the absolute
         path for it.
 
@@ -366,9 +381,18 @@ class Resource(object):
         """
         if self._resource_type == 'vpc':
             return self.load()
-        elif not self.vpc:
+        elif not self._vpc:
             return {}
-        return self.load_file(self.resource_folder, 'vpc')
+        return self.load_file(self.vpc_folder, 'vpc')
+
+    @property
+    def vpc_folder(self):
+        """Return the folder that contains the resource's configuration data
+
+        :rtype: str
+
+        """
+        return path.join(self.base_path, CONFIG_FOLDERS['vpc'], self._vpc)
 
     def vpc_mappings(self):
         """Return the mappings from the vpc folder
@@ -376,23 +400,24 @@ class Resource(object):
         :rtype: dict
 
         """
-        if not self.vpc:
+        if not self._vpc:
             return {}
-        return self.load_file(self.resource_folder, 'mappings')
+        return self.load_file(self.vpc_folder, 'mappings')
 
 
 class Stack(object):
     """Configuration class for Stack objects"""
 
-    def __init__(self, base_path, resource_type, resource_name, vpc,
+    def __init__(self, base_path, config, resource_type, resource_name, vpc,
                  aws_profile=None):
         """Create a new instance of a Stack configuration obj
 
         """
-        config = Resource(base_path, resource_type, resource_name, vpc)
-
+        LOGGER.info('Creating Stack configuration for %s in %s',
+                    resource_name, vpc)
         self._aws_profile = aws_profile
         self._base_path = base_path
+        self._config = config
         self._resource_name = resource_name
         self._resource_type = resource_type
         self._vpc_name = vpc
@@ -400,9 +425,53 @@ class Stack(object):
         self._vpc_stack = aws.VPCStack(vpc, config.vpc_config(), None,
                                        aws_profile)
 
-        self._amis = config.load_file('.', 'amis')
-        self._mappings = config.mappings()
-        self._settings = config.load()
+        self._amis = self._config.load_file('.', 'amis')
+        self._mappings = self._config.mappings()
+        self._settings = self._process_settings(config.load())
+
+    def _maybe_replace_mappings(self, value):
+        """If the value is a ^map macro, replace the with the value from the
+        mappings dict. For example, if the value is ``^map Foo.Bar.Baz``
+        return self._mappings['Foo']['Bar']['Baz'].
+
+        :param str value: The value to check for the map macro
+        :rtype: str|dict
+        :raises: ValueError
+
+        """
+        if value.startswith('^map '):
+            ref = value[5:].split('.')
+            if len(ref) != 3:
+                raise ValueError('Invalid map reference: {}'.format(value[5:]))
+            try:
+                return self._mappings[ref[0]][ref[1]][ref[2]]
+            except KeyError:
+                raise ValueError('Map reference {} not found'.format(value))
+        return value
+
+    def _process_settings(self, settings):
+        for key in settings:
+            if isinstance(settings[key], str):
+                settings[key] = self._maybe_replace_mappings(settings[key])
+            elif isinstance(settings[key], dict):
+                settings[key] = self._process_settings(settings[key])
+            elif isinstance(settings[key], list):
+                for index, value in enumerate(settings[key]):
+                    if isinstance(value, dict):
+                        settings[key][index] = self._process_settings(value)
+                    elif isinstance(value, str):
+                        settings[key][index] = \
+                            self._maybe_replace_mappings(value)
+        return settings
+
+    @property
+    def settings(self):
+        """Return the VPC specific settings for the service
+
+        :return: dict
+
+        """
+        return self._settings
 
     @property
     def subnets(self):
